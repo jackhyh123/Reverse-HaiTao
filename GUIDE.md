@@ -1,10 +1,10 @@
 # 反淘淘金通关系统 - 使用指南 🎯
 
-## 演示视频
+## 演示
 
-<video src="assets/demo.mp4" controls width="100%"></video>
+![反淘淘金通关系统演示](assets/demo.gif)
 
-> 💡 如果视频无法播放，请[点击这里下载](assets/demo.mp4)或查看 [GitHub Releases](https://github.com/jackhyh123/-/releases) 中的演示视频。
+> 💡 如需下载完整演示视频，请[点击这里](assets/demo.mp4)
 
 ---
 
