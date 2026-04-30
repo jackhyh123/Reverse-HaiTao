@@ -1,25 +1,14 @@
 import type { Metadata } from "next";
-import { Plus_Jakarta_Sans, Lora } from "next/font/google";
 import "./globals.css";
 import ThemeScript from "@/components/ThemeScript";
 import { AppShellProvider } from "@/context/AppShellContext";
+import { AuthProvider } from "@/context/AuthContext";
 import { I18nClientBridge } from "@/i18n/I18nClientBridge";
 
-const fontSans = Plus_Jakarta_Sans({
-  subsets: ["latin"],
-  display: "swap",
-  variable: "--font-sans",
-});
-
-const fontSerif = Lora({
-  subsets: ["latin"],
-  display: "swap",
-  variable: "--font-serif",
-});
-
 export const metadata: Metadata = {
-  title: "DeepTutor",
-  description: "Agent-native intelligent learning companion",
+  title: "反淘淘金通关系统",
+  description:
+    "面向反淘卖家与平台运营人员的双语 AI 通关系统。",
   icons: {
     icon: [
       { url: "/favicon-16x16.png", sizes: "16x16", type: "image/png" },
@@ -36,17 +25,18 @@ export default function RootLayout({
 }>) {
   return (
     <html
-      lang="en"
+      lang="zh-CN"
       suppressHydrationWarning
       data-scroll-behavior="smooth"
-      className={`${fontSans.variable} ${fontSerif.variable}`}
     >
       <head>
         <ThemeScript />
       </head>
       <body className="font-sans bg-[var(--background)] text-[var(--foreground)]">
         <AppShellProvider>
-          <I18nClientBridge>{children}</I18nClientBridge>
+          <AuthProvider>
+            <I18nClientBridge>{children}</I18nClientBridge>
+          </AuthProvider>
         </AppShellProvider>
       </body>
     </html>

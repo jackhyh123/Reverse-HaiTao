@@ -2,7 +2,7 @@
 
 import dynamic from "next/dynamic";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 
 import {
   BarChart3,
@@ -20,6 +20,8 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import ChatTrackGuide from "@/components/antitao/ChatTrackGuide";
+import { BrandMark } from "@/components/branding/BrandMark";
 import type { SelectedRecord } from "@/lib/notebook-selection-types";
 import type { SelectedHistorySession } from "@/components/chat/HistorySessionPicker";
 import type { SelectedQuestionEntry } from "@/components/chat/QuestionBankPicker";
@@ -79,6 +81,12 @@ import {
 import { listKnowledgeBases } from "@/lib/knowledge-api";
 import { listSkills, type SkillInfo } from "@/lib/skills-api";
 import { downloadChatMarkdown } from "@/lib/chat-export";
+import {
+  normalizeAntitaoTrack,
+  type AntitaoLocalizedTrackActionDefinition,
+  type AntitaoTrackId,
+  useAntitaoCurriculum,
+} from "@/lib/antitao";
 
 const NotebookRecordPicker = dynamic(
   () => import("@/components/notebook/NotebookRecordPicker"),
@@ -240,8 +248,12 @@ function getCapability(value: string | null): CapabilityDef {
 export default function ChatPage() {
   const params = useParams<{ sessionId?: string[] }>();
   const router = useRouter();
-  const { t } = useTranslation();
+  const searchParams = useSearchParams();
+  const { t, i18n } = useTranslation();
   const sessionIdParam = params.sessionId?.[0] ?? null;
+  const activeTrackId = normalizeAntitaoTrack(searchParams.get("track"));
+  const curriculumLanguage = i18n.language.startsWith("zh") ? "zh" : "en";
+  const { tracks } = useAntitaoCurriculum(curriculumLanguage);
 
   const {
     state,
@@ -1047,6 +1059,75 @@ export default function ChatPage() {
     router.push("/chat");
   }, [router]);
 
+  const handleSelectTrack = useCallback(
+    (trackId: AntitaoTrackId) => {
+      const nextParams = new URLSearchParams(searchParams.toString());
+      nextParams.set("track", trackId);
+      const target = sessionIdParam ? `/chat/${sessionIdParam}` : "/chat";
+      const query = nextParams.toString();
+      router.replace(query ? `${target}?${query}` : target);
+    },
+    [router, searchParams, sessionIdParam],
+  );
+
+  const handleRunTrackAction = useCallback(
+    (action: AntitaoLocalizedTrackActionDefinition) => {
+      const prompt = action.prompt;
+      const capability = action.capability || null;
+      const knowledgeEnabled = state.knowledgeBases.length > 0;
+      const guidedTools = knowledgeEnabled
+        ? ["rag", "web_search", "reason"]
+        : ["web_search", "reason"];
+      const researchSources = knowledgeEnabled ? ["kb", "web"] : ["web"];
+      const tools = capability === "deep_research" ? [] : guidedTools;
+      const config =
+        capability === "deep_research"
+          ? {
+              mode: "report",
+              depth: "deep",
+              sources: researchSources,
+            }
+          : undefined;
+      const requestSnapshot: MessageRequestSnapshot = {
+        content: prompt,
+        capability,
+        enabledTools: tools,
+        knowledgeBases: knowledgeEnabled ? [...state.knowledgeBases] : [],
+        language: state.language,
+        ...(config ? { config } : {}),
+        ...(capability ? {} : { skills: ["auto"] }),
+      };
+
+      setCapability(capability);
+      setTools(tools);
+      sendMessage(
+        prompt,
+        [],
+        config,
+        undefined,
+        undefined,
+        { requestSnapshotOverride: requestSnapshot },
+        undefined,
+        capability ? undefined : ["auto"],
+      );
+      shouldAutoScrollRef.current = true;
+      setPanelCollapsed(true);
+      setAttachments([]);
+      setSelectedNotebookRecords([]);
+      setSelectedHistorySessions([]);
+      setSelectedQuestionEntries([]);
+    },
+    [
+      curriculumLanguage,
+      sendMessage,
+      setCapability,
+      setTools,
+      shouldAutoScrollRef,
+      state.knowledgeBases,
+      state.language,
+    ],
+  );
+
   const handleDownloadMarkdown = useCallback(() => {
     if (!state.messages.length) return;
     const title =
@@ -1069,10 +1150,38 @@ export default function ChatPage() {
       data-preview-open={previewSource ? "true" : "false"}
       className="chat-preview-shell flex h-full flex-col overflow-hidden bg-[var(--background)]"
     >
-      <div className="mx-auto flex w-full max-w-[960px] items-center justify-between px-6 pt-3 pb-0">
-        <span className="text-[15px] font-semibold tracking-[-0.01em] text-[var(--foreground)]">
-          {t(activeCap.label)}
-        </span>
+      <div className="mx-auto flex w-full max-w-[960px] flex-col gap-4 px-6 pb-0 pt-4 md:flex-row md:items-start md:justify-between">
+        <div className="flex flex-col gap-3">
+          <div className="flex items-center gap-3">
+            <BrandMark size="sm" className="shadow-none" />
+            <div>
+              <div className="text-[11px] font-semibold tracking-[0.22em] text-[var(--muted-foreground)]">
+                {t("brand.name")}
+              </div>
+              <div className="text-[15px] font-semibold tracking-[-0.01em] text-[var(--foreground)]">
+                {t(activeCap.label)}
+              </div>
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {(["seller", "operator"] as AntitaoTrackId[]).map((trackId) => {
+              const active = trackId === activeTrackId;
+              return (
+                <button
+                  key={trackId}
+                  onClick={() => handleSelectTrack(trackId)}
+                  className={`rounded-full border px-3 py-1.5 text-[12px] font-medium transition-colors ${
+                    active
+                      ? "border-[var(--primary)] bg-[var(--primary)] text-[var(--primary-foreground)]"
+                      : "border-[var(--border)]/70 bg-[var(--secondary)]/45 text-[var(--muted-foreground)] hover:bg-[var(--secondary)]/70 hover:text-[var(--foreground)]"
+                  }`}
+                >
+                  {tracks[trackId].badge}
+                </button>
+              );
+            })}
+          </div>
+        </div>
         <div className="flex items-center gap-2">
           <button
             onClick={() => setShowSaveModal(true)}
@@ -1097,37 +1206,113 @@ export default function ChatPage() {
           </button>
         </div>
       </div>
-      <div className="mx-auto flex w-full max-w-[960px] flex-1 min-h-0 flex-col overflow-hidden px-6">
-        {!hasMessages ? (
-          <div className="flex flex-1 min-h-0 flex-col items-center justify-center animate-fade-in">
-            <div className="text-center">
-              <h1 className="font-serif text-[36px] font-medium tracking-[-0.01em] text-[var(--foreground)]">
-                {t("What would you like to learn?")}
-              </h1>
-              <p className="mt-4 text-[15px] text-[var(--muted-foreground)]">
-                {t("Ask anything — I'm here to help you understand.")}
-              </p>
-            </div>
+      {!hasMessages ? (
+        <div className="mx-auto flex w-full max-w-[960px] flex-1 min-h-0 flex-col overflow-y-auto px-6 pb-6">
+          <ChatTrackGuide
+            activeTrackId={activeTrackId}
+            knowledgeReady={state.knowledgeBases.length > 0}
+            onSelectTrack={handleSelectTrack}
+            onRunAction={handleRunTrackAction}
+          />
+
+          <div className="mt-8">
+            <ChatComposer
+              composerRef={composerRef}
+              capMenuRef={capMenuRef}
+              capBtnRef={capBtnRef}
+              toolMenuRef={toolMenuRef}
+              toolBtnRef={toolBtnRef}
+              refMenuRef={refMenuRef}
+              refBtnRef={refBtnRef}
+              skillMenuRef={skillMenuRef}
+              skillBtnRef={skillBtnRef}
+              dragCounter={dragCounter}
+              dragging={dragging}
+              capMenuOpen={capMenuOpen}
+              toolMenuOpen={toolMenuOpen}
+              refMenuOpen={refMenuOpen}
+              skillMenuOpen={skillMenuOpen}
+              hasMessages={hasMessages}
+              attachments={attachments}
+              attachmentError={attachmentError}
+              activeCap={activeCap}
+              visibleTools={visibleTools}
+              selectedTools={selectedTools}
+              ragActive={ragActive}
+              knowledgeBases={knowledgeBases}
+              selectedNotebookRecords={selectedNotebookRecords}
+              selectedHistorySessions={selectedHistorySessions}
+              selectedQuestionEntries={selectedQuestionEntries}
+              notebookReferenceGroups={notebookReferenceGroups}
+              availableSkills={availableSkills}
+              selectedSkills={selectedSkills}
+              skillsAutoMode={skillsAutoMode}
+              stateKnowledgeBase={state.knowledgeBases[0] || ""}
+              isStreaming={state.isStreaming}
+              isResearchMode={isResearchMode}
+              isQuizMode={isQuizMode}
+              isMathAnimatorMode={isMathAnimatorMode}
+              isVisualizeMode={isVisualizeMode}
+              quizConfig={quizConfig}
+              quizPdf={quizPdf}
+              mathAnimatorConfig={mathAnimatorConfig}
+              visualizeConfig={visualizeConfig}
+              researchConfig={researchConfig}
+              researchValidationErrors={researchValidation.errors}
+              panelCollapsed={panelCollapsed}
+              capabilities={CAPABILITIES}
+              researchSources={RESEARCH_SOURCES}
+              onSetCapMenuOpen={setCapMenuOpen}
+              onSetToolMenuOpen={setToolMenuOpen}
+              onSetRefMenuOpen={setRefMenuOpen}
+              onSetSkillMenuOpen={setSkillMenuOpen}
+              onSetKB={handleSetKB}
+              onSelectNotebookPicker={handleSelectNotebookPicker}
+              onSelectHistoryPicker={handleSelectHistoryPicker}
+              onSelectQuestionBankPicker={handleSelectQuestionBankPicker}
+              onToggleTool={toggleTool}
+              onToggleSkill={handleToggleSkill}
+              onSetSkillsAuto={handleSetSkillsAuto}
+              onToggleResearchSource={toggleResearchSource}
+              onSend={handleSend}
+              onRemoveAttachment={removeAttachment}
+              onPreviewAttachment={handlePreviewPendingAttachment}
+              onRemoveHistory={handleRemoveHistory}
+              onRemoveNotebook={handleRemoveNotebook}
+              onRemoveQuestion={handleRemoveQuestion}
+              onDragEnter={handleDragEnter}
+              onDragLeave={handleDragLeave}
+              onDragOver={handleDragOver}
+              onDrop={handleDrop}
+              onPaste={handlePaste}
+              onAddFiles={handleAddFiles}
+              onSelectCapability={handleSelectCapability}
+              onCancelStreaming={cancelStreamingTurn}
+              onChangeQuizConfig={setQuizConfig}
+              onUploadQuizPdf={setQuizPdf}
+              onChangeMathAnimatorConfig={setMathAnimatorConfig}
+              onChangeVisualizeConfig={setVisualizeConfig}
+              onChangeResearchConfig={setResearchConfig}
+              onTogglePanelCollapsed={handleTogglePanelCollapsed}
+            />
           </div>
-        ) : (
+        </div>
+      ) : (
+        <div className="mx-auto flex w-full max-w-[960px] flex-1 min-h-0 flex-col overflow-hidden px-6">
           <div
             ref={messagesContainerRef}
             data-chat-scroll-root="true"
             onScroll={handleMessagesScroll}
-            className={`mx-auto w-full flex-1 min-h-0 space-y-7 overflow-y-auto pr-4 [scrollbar-gutter:stable] ${hasMessages ? "pt-0" : "pt-2 pb-6"}`}
-            style={
-              hasMessages
-                ? (() => {
-                    const maskImage =
-                      "linear-gradient(to bottom, transparent 0px, #000 32px, #000 calc(100% - 40px), transparent 100%)";
-                    return {
-                      paddingBottom: "4px",
-                      WebkitMaskImage: maskImage,
-                      maskImage,
-                    };
-                  })()
-                : undefined
-            }
+            className="mx-auto w-full flex-1 min-h-0 space-y-7 overflow-y-auto pr-4 pt-0 [scrollbar-gutter:stable]"
+            style={(() => {
+              const maskImage =
+                "linear-gradient(to bottom, transparent 0px, #000 32px, #000 calc(100% - 40px), transparent 100%)";
+              return {
+                paddingBottom: "4px",
+                WebkitMaskImage: maskImage,
+                maskImage,
+              };
+            })()}
           >
             <ChatMessageList
               messages={state.messages}
@@ -1142,88 +1327,88 @@ export default function ChatPage() {
             />
             <div ref={messagesEndRef} className="h-px w-full shrink-0" />
           </div>
-        )}
 
-        <ChatComposer
-          composerRef={composerRef}
-          capMenuRef={capMenuRef}
-          capBtnRef={capBtnRef}
-          toolMenuRef={toolMenuRef}
-          toolBtnRef={toolBtnRef}
-          refMenuRef={refMenuRef}
-          refBtnRef={refBtnRef}
-          skillMenuRef={skillMenuRef}
-          skillBtnRef={skillBtnRef}
-          dragCounter={dragCounter}
-          dragging={dragging}
-          capMenuOpen={capMenuOpen}
-          toolMenuOpen={toolMenuOpen}
-          refMenuOpen={refMenuOpen}
-          skillMenuOpen={skillMenuOpen}
-          hasMessages={hasMessages}
-          attachments={attachments}
-          attachmentError={attachmentError}
-          activeCap={activeCap}
-          visibleTools={visibleTools}
-          selectedTools={selectedTools}
-          ragActive={ragActive}
-          knowledgeBases={knowledgeBases}
-          selectedNotebookRecords={selectedNotebookRecords}
-          selectedHistorySessions={selectedHistorySessions}
-          selectedQuestionEntries={selectedQuestionEntries}
-          notebookReferenceGroups={notebookReferenceGroups}
-          availableSkills={availableSkills}
-          selectedSkills={selectedSkills}
-          skillsAutoMode={skillsAutoMode}
-          stateKnowledgeBase={state.knowledgeBases[0] || ""}
-          isStreaming={state.isStreaming}
-          isResearchMode={isResearchMode}
-          isQuizMode={isQuizMode}
-          isMathAnimatorMode={isMathAnimatorMode}
-          isVisualizeMode={isVisualizeMode}
-          quizConfig={quizConfig}
-          quizPdf={quizPdf}
-          mathAnimatorConfig={mathAnimatorConfig}
-          visualizeConfig={visualizeConfig}
-          researchConfig={researchConfig}
-          researchValidationErrors={researchValidation.errors}
-          panelCollapsed={panelCollapsed}
-          capabilities={CAPABILITIES}
-          researchSources={RESEARCH_SOURCES}
-          onSetCapMenuOpen={setCapMenuOpen}
-          onSetToolMenuOpen={setToolMenuOpen}
-          onSetRefMenuOpen={setRefMenuOpen}
-          onSetSkillMenuOpen={setSkillMenuOpen}
-          onSetKB={handleSetKB}
-          onSelectNotebookPicker={handleSelectNotebookPicker}
-          onSelectHistoryPicker={handleSelectHistoryPicker}
-          onSelectQuestionBankPicker={handleSelectQuestionBankPicker}
-          onToggleTool={toggleTool}
-          onToggleSkill={handleToggleSkill}
-          onSetSkillsAuto={handleSetSkillsAuto}
-          onToggleResearchSource={toggleResearchSource}
-          onSend={handleSend}
-          onRemoveAttachment={removeAttachment}
-          onPreviewAttachment={handlePreviewPendingAttachment}
-          onRemoveHistory={handleRemoveHistory}
-          onRemoveNotebook={handleRemoveNotebook}
-          onRemoveQuestion={handleRemoveQuestion}
-          onDragEnter={handleDragEnter}
-          onDragLeave={handleDragLeave}
-          onDragOver={handleDragOver}
-          onDrop={handleDrop}
-          onPaste={handlePaste}
-          onAddFiles={handleAddFiles}
-          onSelectCapability={handleSelectCapability}
-          onCancelStreaming={cancelStreamingTurn}
-          onChangeQuizConfig={setQuizConfig}
-          onUploadQuizPdf={setQuizPdf}
-          onChangeMathAnimatorConfig={setMathAnimatorConfig}
-          onChangeVisualizeConfig={setVisualizeConfig}
-          onChangeResearchConfig={setResearchConfig}
-          onTogglePanelCollapsed={handleTogglePanelCollapsed}
-        />
-      </div>
+          <ChatComposer
+            composerRef={composerRef}
+            capMenuRef={capMenuRef}
+            capBtnRef={capBtnRef}
+            toolMenuRef={toolMenuRef}
+            toolBtnRef={toolBtnRef}
+            refMenuRef={refMenuRef}
+            refBtnRef={refBtnRef}
+            skillMenuRef={skillMenuRef}
+            skillBtnRef={skillBtnRef}
+            dragCounter={dragCounter}
+            dragging={dragging}
+            capMenuOpen={capMenuOpen}
+            toolMenuOpen={toolMenuOpen}
+            refMenuOpen={refMenuOpen}
+            skillMenuOpen={skillMenuOpen}
+            hasMessages={hasMessages}
+            attachments={attachments}
+            attachmentError={attachmentError}
+            activeCap={activeCap}
+            visibleTools={visibleTools}
+            selectedTools={selectedTools}
+            ragActive={ragActive}
+            knowledgeBases={knowledgeBases}
+            selectedNotebookRecords={selectedNotebookRecords}
+            selectedHistorySessions={selectedHistorySessions}
+            selectedQuestionEntries={selectedQuestionEntries}
+            notebookReferenceGroups={notebookReferenceGroups}
+            availableSkills={availableSkills}
+            selectedSkills={selectedSkills}
+            skillsAutoMode={skillsAutoMode}
+            stateKnowledgeBase={state.knowledgeBases[0] || ""}
+            isStreaming={state.isStreaming}
+            isResearchMode={isResearchMode}
+            isQuizMode={isQuizMode}
+            isMathAnimatorMode={isMathAnimatorMode}
+            isVisualizeMode={isVisualizeMode}
+            quizConfig={quizConfig}
+            quizPdf={quizPdf}
+            mathAnimatorConfig={mathAnimatorConfig}
+            visualizeConfig={visualizeConfig}
+            researchConfig={researchConfig}
+            researchValidationErrors={researchValidation.errors}
+            panelCollapsed={panelCollapsed}
+            capabilities={CAPABILITIES}
+            researchSources={RESEARCH_SOURCES}
+            onSetCapMenuOpen={setCapMenuOpen}
+            onSetToolMenuOpen={setToolMenuOpen}
+            onSetRefMenuOpen={setRefMenuOpen}
+            onSetSkillMenuOpen={setSkillMenuOpen}
+            onSetKB={handleSetKB}
+            onSelectNotebookPicker={handleSelectNotebookPicker}
+            onSelectHistoryPicker={handleSelectHistoryPicker}
+            onSelectQuestionBankPicker={handleSelectQuestionBankPicker}
+            onToggleTool={toggleTool}
+            onToggleSkill={handleToggleSkill}
+            onSetSkillsAuto={handleSetSkillsAuto}
+            onToggleResearchSource={toggleResearchSource}
+            onSend={handleSend}
+            onRemoveAttachment={removeAttachment}
+            onPreviewAttachment={handlePreviewPendingAttachment}
+            onRemoveHistory={handleRemoveHistory}
+            onRemoveNotebook={handleRemoveNotebook}
+            onRemoveQuestion={handleRemoveQuestion}
+            onDragEnter={handleDragEnter}
+            onDragLeave={handleDragLeave}
+            onDragOver={handleDragOver}
+            onDrop={handleDrop}
+            onPaste={handlePaste}
+            onAddFiles={handleAddFiles}
+            onSelectCapability={handleSelectCapability}
+            onCancelStreaming={cancelStreamingTurn}
+            onChangeQuizConfig={setQuizConfig}
+            onUploadQuizPdf={setQuizPdf}
+            onChangeMathAnimatorConfig={setMathAnimatorConfig}
+            onChangeVisualizeConfig={setVisualizeConfig}
+            onChangeResearchConfig={setResearchConfig}
+            onTogglePanelCollapsed={handleTogglePanelCollapsed}
+          />
+        </div>
+      )}
       <NotebookRecordPicker
         open={showNotebookPicker}
         onClose={handleCloseNotebookPicker}

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { AlertTriangle, RefreshCcw, X, ScrollText } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { bookApi } from "@/lib/book-api";
 
 export interface BookHealthBannerProps {
@@ -30,6 +31,7 @@ export default function BookHealthBanner({
   refreshKey,
   onRecompile,
 }: BookHealthBannerProps) {
+  const { t } = useTranslation();
   const [kbDrift, setKbDrift] = useState<KbDrift | null>(null);
   const [logHealth, setLogHealth] = useState<LogHealth | null>(null);
   const [dismissed, setDismissed] = useState(false);
@@ -78,7 +80,7 @@ export default function BookHealthBanner({
 
   // Convert technical signatures into a short human label.
   const humanizeSignature = (sig: string): string => {
-    if (!sig) return "unknown failure";
+    if (!sig) return t("book.health.unknownFailure");
     const stripped = sig.replace(/^[a-z_]+:/i, "").trim();
     return stripped.length > 80 ? `${stripped.slice(0, 80)}…` : stripped;
   };
@@ -102,12 +104,12 @@ export default function BookHealthBanner({
           {hasDrift && (
             <div>
               <strong>
-                Your knowledge bases changed since this book was generated.
+                {t("book.health.kbChanged")}
               </strong>{" "}
               <span className="opacity-90">
                 {kbDrift?.new_kbs?.length ? (
                   <>
-                    Newly added:{" "}
+                    {t("book.health.newlyAdded")}{" "}
                     <code className="rounded bg-white/40 px-1 text-[11px] dark:bg-white/10">
                       {kbDrift.new_kbs.join(", ")}
                     </code>
@@ -116,7 +118,7 @@ export default function BookHealthBanner({
                 ) : null}
                 {kbDrift?.changed_kbs?.length ? (
                   <>
-                    Updated:{" "}
+                    {t("book.health.updated")}{" "}
                     <code className="rounded bg-white/40 px-1 text-[11px] dark:bg-white/10">
                       {kbDrift.changed_kbs.join(", ")}
                     </code>
@@ -125,7 +127,7 @@ export default function BookHealthBanner({
                 ) : null}
                 {kbDrift?.removed_kbs?.length ? (
                   <>
-                    Removed:{" "}
+                    {t("book.health.removed")}{" "}
                     <code className="rounded bg-white/40 px-1 text-[11px] dark:bg-white/10">
                       {kbDrift.removed_kbs.join(", ")}
                     </code>
@@ -135,16 +137,16 @@ export default function BookHealthBanner({
               </span>
               {kbDrift?.stale_page_ids?.length ? (
                 <div className="mt-1.5 text-xs opacity-90">
-                  {kbDrift.stale_page_ids.length} previously-compiled page
-                  {kbDrift.stale_page_ids.length === 1 ? "" : "s"} may be out of
-                  date.{" "}
+                  {t("book.health.stalePages", {
+                    count: kbDrift.stale_page_ids.length,
+                  })}{" "}
                   {onRecompile && kbDrift.stale_page_ids[0] && (
                     <button
                       onClick={() => onRecompile(kbDrift.stale_page_ids![0])}
                       className="ml-1 inline-flex items-center gap-1 rounded border border-current px-1.5 py-0.5 text-xs hover:bg-white/40"
                     >
-                      <RefreshCcw className="h-3 w-3" /> Recompile first stale
-                      page
+                      <RefreshCcw className="h-3 w-3" />{" "}
+                      {t("book.health.recompileFirst")}
                     </button>
                   )}
                 </div>
@@ -156,14 +158,12 @@ export default function BookHealthBanner({
               <ScrollText className="h-3.5 w-3.5" />
               {blockFailures > 0 && (
                 <span>
-                  {blockFailures} block generation{" "}
-                  {blockFailures === 1 ? "failure" : "failures"} recorded.
+                  {t("book.health.blockFailures", { count: blockFailures })}
                 </span>
               )}
               {repeated.length > 0 && (
                 <span>
-                  Recurring issue
-                  {repeated.length === 1 ? "" : "s"}:{" "}
+                  {t("book.health.recurringIssues")}{" "}
                   {repeated
                     .map(
                       (r) => `${humanizeSignature(r.signature)} (×${r.count})`,
@@ -180,10 +180,10 @@ export default function BookHealthBanner({
             <button
               onClick={acknowledge}
               disabled={busy}
-              title="Mark the current KB state as the new baseline (won't recompile pages — use the recompile button above for that)."
+              title={t("book.health.markAsSeenTitle")}
               className="whitespace-nowrap rounded-md border border-current px-2 py-1 text-xs font-medium hover:bg-white/40 disabled:opacity-60"
             >
-              {busy ? "…" : "Mark as seen"}
+              {busy ? "…" : t("book.health.markAsSeen")}
             </button>
           )}
           <button

@@ -83,8 +83,12 @@ export function applyThemeToDocument(theme: Theme): void {
   if (typeof document === "undefined") return;
 
   const html = document.documentElement;
+  const nextColorScheme =
+    theme === "dark" || theme === "glass" ? "dark" : "light";
 
   html.classList.remove("dark", "theme-glass", "theme-snow");
+  html.dataset.theme = theme;
+  html.style.colorScheme = nextColorScheme;
 
   if (theme === "dark") {
     html.classList.add("dark");
@@ -107,11 +111,9 @@ export function initializeTheme(): Theme {
     return stored;
   }
 
-  // Fall back to system preference
-  const systemTheme = getSystemTheme();
-  applyThemeToDocument(systemTheme);
-  saveThemeToStorage(systemTheme);
-  return systemTheme;
+  applyThemeToDocument("dark");
+  saveThemeToStorage("dark");
+  return "dark";
 }
 
 /**

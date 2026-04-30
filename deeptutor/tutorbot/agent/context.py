@@ -170,10 +170,22 @@ Reply directly with text for conversations. Only use the 'message' tool to send 
         media: list[str] | None = None,
         channel: str | None = None,
         chat_id: str | None = None,
+        grounding_context: str | None = None,
     ) -> list[dict[str, Any]]:
         """Build the complete message list for an LLM call."""
         runtime_ctx = self._build_runtime_context(channel, chat_id)
         user_content = self._build_user_content(current_message, media)
+        system_prompt = self.build_system_prompt(skill_names)
+        if grounding_context:
+            system_prompt = (
+                f"{system_prompt}\n\n---\n\n"
+                "# Mandatory Knowledge Base Context\n\n"
+                "Use the following retrieved knowledge as the primary source of truth. "
+                "If it conflicts with your general knowledge, follow this context. "
+                "Do not mention unsupported mainstream e-commerce assumptions unless "
+                "the user explicitly asks for them.\n\n"
+                f"{grounding_context}"
+            )
 
         # Merge runtime context and user content into a single user message
         # to avoid consecutive same-role messages that some providers reject.
@@ -184,7 +196,7 @@ Reply directly with text for conversations. Only use the 'message' tool to send 
             merged = [{"type": "text", "text": runtime_ctx}] + user_content
 
         return [
-            {"role": "system", "content": self.build_system_prompt(skill_names)},
+            {"role": "system", "content": system_prompt},
             *history,
             {"role": "user", "content": merged},
         ]

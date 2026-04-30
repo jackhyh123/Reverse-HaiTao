@@ -6,9 +6,9 @@ requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "deeptutor"
+name = "antitao-tutor"
 version = "1.0.0"
-description = "An agent-native intelligent learning companion with multi-agent collaboration and RAG"
+description = "反淘淘金通关系统 - AI驱动的跨境反向海淘通关学习平台"
 requires-python = ">=3.11"
 readme = "README.md"
 license = {text = "Apache-2.0"}

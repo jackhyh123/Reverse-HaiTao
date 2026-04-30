@@ -24,29 +24,39 @@
     --border: #dbd4c8;
     --input: #dbd4c8;
     --ring: #b0501e;
+    --font-sans: ui-sans-serif, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", system-ui, sans-serif;
+    --font-serif: Georgia, "Songti SC", "STSong", serif;
   }
 
   .dark {
     color-scheme: dark;
-    --background: #1a1918;
-    --foreground: #e8e4de;
-    --card: #242220;
-    --card-foreground: #e8e4de;
-    --popover: #242220;
-    --popover-foreground: #e8e4de;
-    --primary: #d4734b;
-    --primary-foreground: #1a1918;
-    --secondary: #2a2725;
-    --secondary-foreground: #e8e4de;
-    --muted: #2a2725;
-    --muted-foreground: #9b9590;
-    --accent: #302d2a;
-    --accent-foreground: #e8e4de;
-    --destructive: #d44a3c;
+    --background: #0b1020;
+    --foreground: #edf2ff;
+    --card: #121a2f;
+    --card-foreground: #edf2ff;
+    --popover: #121a2f;
+    --popover-foreground: #edf2ff;
+    --primary: #f59e0b;
+    --primary-foreground: #0b1020;
+    --secondary: #111827;
+    --secondary-foreground: #edf2ff;
+    --muted: #18233d;
+    --muted-foreground: #94a3b8;
+    --accent: #1d2945;
+    --accent-foreground: #edf2ff;
+    --destructive: #ef4444;
     --destructive-foreground: #ffffff;
-    --border: #3a3634;
-    --input: #3a3634;
-    --ring: #d4734b;
+    --border: #25324a;
+    --input: #25324a;
+    --ring: #f59e0b;
+  }
+
+  .dark body {
+    background:
+      radial-gradient(circle at top left, rgba(245, 158, 11, 0.12), transparent 28%),
+      radial-gradient(circle at bottom right, rgba(15, 118, 110, 0.12), transparent 30%),
+      linear-gradient(180deg, #0b1020 0%, #0a0f1c 100%);
+    background-attachment: fixed;
   }
 
   .theme-snow {

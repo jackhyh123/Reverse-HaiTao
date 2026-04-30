@@ -8,6 +8,7 @@ import {
   ChevronDown,
   ChevronUp,
 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import type { Block, BlockType, Page } from "@/lib/book-types";
 import BlockRenderer from "./blocks/BlockRenderer";
 import PageOutlineNav from "./PageOutlineNav";
@@ -60,6 +61,7 @@ export default function PageReader({
   bookId,
   bookLanguage,
 }: PageReaderProps) {
+  const { t } = useTranslation();
   const [showInsertMenu, setShowInsertMenu] = useState(false);
   const [inserting, setInserting] = useState(false);
   const [scrollContainer, setScrollContainer] = useState<HTMLDivElement | null>(
@@ -106,7 +108,7 @@ export default function PageReader({
   if (!page) {
     return (
       <div className="flex h-full items-center justify-center text-[var(--muted-foreground)]">
-        Select a chapter to start reading.
+        {t("book.reader.selectChapter")}
       </div>
     );
   }
@@ -135,7 +137,7 @@ export default function PageReader({
               ].join(" ")}
               title={page.title || "Untitled chapter"}
             >
-              {page.title || "Untitled chapter"}
+              {page.title || t("book.reader.untitledChapter")}
             </h1>
             {!headerCollapsed && page.learning_objectives.length > 0 && (
               <ul className="mt-3 space-y-0.5 text-[12.5px] text-[var(--muted-foreground)]">
@@ -156,7 +158,8 @@ export default function PageReader({
                 onClick={onRecompile}
                 className="inline-flex items-center gap-1.5 rounded-md border border-[var(--border)] bg-[var(--card)] px-2.5 py-1 text-xs font-medium text-[var(--muted-foreground)] hover:border-[var(--primary)]/40 hover:text-[var(--primary)]"
               >
-                <RefreshCcw className="h-3.5 w-3.5" /> Recompile
+                <RefreshCcw className="h-3.5 w-3.5" />{" "}
+                {t("book.reader.recompile")}
               </button>
             )}
             <button
@@ -186,7 +189,7 @@ export default function PageReader({
         {loading && page.blocks.length === 0 ? (
           <div className="mx-auto flex w-full max-w-[78ch] items-center gap-2 text-sm text-[var(--muted-foreground)]">
             <Loader2 className="h-4 w-4 animate-spin" />
-            Compiling page…
+            {t("book.reader.compilingPage")}
           </div>
         ) : (
           <article className="mx-auto flex w-full max-w-[78ch] flex-col gap-6 [&>:first-child]:mt-0">
@@ -213,7 +216,7 @@ export default function PageReader({
             ))}
             {page.blocks.length === 0 && (
               <div className="text-sm text-[var(--muted-foreground)]">
-                This page has no blocks yet.
+                {t("book.reader.noBlocks")}
               </div>
             )}
 
@@ -229,7 +232,7 @@ export default function PageReader({
                   ) : (
                     <Plus className="h-3.5 w-3.5" />
                   )}
-                  Insert block
+                  {t("book.reader.insertBlock")}
                 </button>
                 {showInsertMenu && (
                   <div className="absolute top-full mt-1 z-10 grid w-72 grid-cols-2 gap-1 rounded-lg border border-[var(--border)] bg-[var(--card)] p-2 shadow-lg">

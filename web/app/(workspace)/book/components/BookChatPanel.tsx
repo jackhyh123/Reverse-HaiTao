@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Send, Loader2, MessageSquare, X } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { wsUrl } from "@/lib/api";
 import MarkdownRenderer from "@/components/common/MarkdownRenderer";
 import type { Page, Book } from "@/lib/book-types";
@@ -25,6 +26,7 @@ export default function BookChatPanel({
   open,
   onClose,
 }: BookChatPanelProps) {
+  const { t } = useTranslation();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
@@ -41,7 +43,7 @@ export default function BookChatPanel({
 
   useEffect(() => {
     sessionIdRef.current = null;
-    setMessages([]);
+    queueMicrotask(() => setMessages([]));
   }, [book?.id]);
 
   useEffect(() => {
@@ -109,7 +111,10 @@ export default function BookChatPanel({
           case "error":
             setMessages((prev) => [
               ...prev,
-              { role: "assistant", content: `❌ ${data.message || "error"}` },
+              {
+                role: "assistant",
+                content: `❌ ${data.message || t("book.chat.error")}`,
+              },
             ]);
             setBusy(false);
             break;
@@ -168,7 +173,7 @@ export default function BookChatPanel({
       <header className="flex items-center justify-between border-b border-[var(--border)] px-4 py-3">
         <div className="flex items-center gap-2 text-sm font-medium text-[var(--foreground)]">
           <MessageSquare className="h-4 w-4 text-[var(--primary)]" />
-          Page Chat
+          {t("book.chat.title")}
         </div>
         <button
           onClick={onClose}
@@ -181,8 +186,7 @@ export default function BookChatPanel({
       <div ref={scrollerRef} className="flex-1 overflow-y-auto px-4 py-3">
         {messages.length === 0 ? (
           <div className="text-xs text-[var(--muted-foreground)]">
-            Ask a question about this page. Context (book + chapter) is sent
-            automatically.
+            {t("book.chat.emptyHint")}
           </div>
         ) : (
           <div className="space-y-3">
@@ -217,7 +221,7 @@ export default function BookChatPanel({
           <textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder="Ask about this page…"
+            placeholder={t("book.chat.placeholder")}
             rows={2}
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) {

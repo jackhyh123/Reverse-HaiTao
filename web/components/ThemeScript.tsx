@@ -9,25 +9,30 @@ export default function ThemeScript() {
     (function() {
       try {
         const stored = localStorage.getItem('deeptutor-theme');
+        const root = document.documentElement;
 
-        document.documentElement.classList.remove('dark', 'theme-glass', 'theme-snow');
+        root.classList.remove('dark', 'theme-glass', 'theme-snow');
 
         if (stored === 'dark') {
-          document.documentElement.classList.add('dark');
+          root.classList.add('dark');
+          root.dataset.theme = 'dark';
+          root.style.colorScheme = 'dark';
         } else if (stored === 'glass') {
-          document.documentElement.classList.add('dark', 'theme-glass');
+          root.classList.add('dark', 'theme-glass');
+          root.dataset.theme = 'glass';
+          root.style.colorScheme = 'dark';
         } else if (stored === 'snow') {
-          document.documentElement.classList.add('theme-snow');
+          root.classList.add('theme-snow');
+          root.dataset.theme = 'snow';
+          root.style.colorScheme = 'light';
         } else if (stored === 'light') {
-          // already clean
+          root.dataset.theme = 'light';
+          root.style.colorScheme = 'light';
         } else {
-          // Use system preference if not set
-          if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
-            document.documentElement.classList.add('dark');
-            localStorage.setItem('deeptutor-theme', 'dark');
-          } else {
-            localStorage.setItem('deeptutor-theme', 'light');
-          }
+          root.classList.add('dark');
+          root.dataset.theme = 'dark';
+          root.style.colorScheme = 'dark';
+          localStorage.setItem('deeptutor-theme', 'dark');
         }
       } catch (e) {
         // Silently fail - localStorage may be disabled

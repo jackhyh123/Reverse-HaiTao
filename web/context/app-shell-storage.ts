@@ -17,11 +17,11 @@ export function normalizeLanguage(
 }
 
 export function readStoredLanguage(): AppLanguage {
-  if (typeof window === "undefined") return "en";
+  if (typeof window === "undefined") return "zh";
   try {
     return normalizeLanguage(window.localStorage.getItem(LANGUAGE_STORAGE_KEY));
   } catch {
-    return "en";
+    return "zh";
   }
 }
 

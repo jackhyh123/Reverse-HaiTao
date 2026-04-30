@@ -1,6 +1,7 @@
 "use client";
 
 import { ArrowLeft, Compass } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import type { Book, Page } from "@/lib/book-types";
 
 const STATUS_LABEL: Record<string, string> = {
@@ -27,25 +28,31 @@ export default function BookSidebar({
   selectedPageId = null,
   onSelectPage,
 }: BookSidebarProps) {
+  const { t } = useTranslation();
+  const statusLabel = (status: string) =>
+    t(`book.sidebar.status.${status}`, { defaultValue: status });
   return (
     <aside className="flex h-full w-[232px] flex-col gap-3 border-r border-[var(--border)] bg-[var(--card)]/40 px-3 py-4">
       <button
         onClick={onBackToLibrary}
         className="inline-flex items-center gap-1.5 self-start rounded-md px-2 py-1 text-xs font-medium text-[var(--muted-foreground)] transition-colors hover:bg-[var(--muted)]/40 hover:text-[var(--foreground)]"
       >
-        <ArrowLeft className="h-3.5 w-3.5" /> All books
+        <ArrowLeft className="h-3.5 w-3.5" /> {t("book.sidebar.allBooks")}
       </button>
 
       {book && (
         <div className="px-1">
           <div
             className="line-clamp-2 text-sm font-semibold text-[var(--foreground)]"
-            title={book.title || "Untitled book"}
+            title={book.title || t("book.library.untitledBook")}
           >
-            {book.title || "Untitled book"}
+            {book.title || t("book.library.untitledBook")}
           </div>
           <div className="mt-0.5 text-[10px] uppercase tracking-wider text-[var(--muted-foreground)]">
-            {book.status} · {book.chapter_count || 0} chapters
+            {statusLabel(book.status)} ·{" "}
+            {t("book.library.chapterCount", {
+              count: book.chapter_count || 0,
+            })}
           </div>
         </div>
       )}
@@ -53,12 +60,12 @@ export default function BookSidebar({
       <section className="flex-1 overflow-y-auto">
         {pages.length === 0 ? (
           <div className="rounded-md border border-dashed border-[var(--border)] px-2 py-3 text-xs text-[var(--muted-foreground)]">
-            Pages will appear here once the spine is confirmed.
+            {t("book.sidebar.pagesWillAppear")}
           </div>
         ) : (
           <>
             <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--muted-foreground)]">
-              Chapters
+              {t("book.library.chapters")}
             </div>
             <ul className="space-y-1">
               {pages.map((page) => {
@@ -83,11 +90,11 @@ export default function BookSidebar({
                           <Compass className="mt-[1px] h-3 w-3 shrink-0 text-[var(--primary)]" />
                         )}
                         <span className="line-clamp-2">
-                          {page.title || "Untitled"}
+                          {page.title || t("book.sidebar.untitled")}
                         </span>
                       </span>
                       <span className="shrink-0 rounded-full bg-[var(--muted)] px-1.5 py-0.5 text-[9px] uppercase tracking-wider text-[var(--muted-foreground)]">
-                        {STATUS_LABEL[page.status] || page.status}
+                        {statusLabel(page.status)}
                       </span>
                     </button>
                   </li>

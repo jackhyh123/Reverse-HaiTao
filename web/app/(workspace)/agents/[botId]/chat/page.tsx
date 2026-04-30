@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { useParams, useRouter } from "next/navigation";
 import { useTranslation } from "react-i18next";
-import { ArrowLeft, Bot, Loader2, Send } from "lucide-react";
+import { ArrowLeft, Bot, Loader2, Network, Send, Store, type LucideIcon } from "lucide-react";
 import { apiUrl, wsUrl } from "@/lib/api";
 import { firstParam } from "@/lib/route-params";
 import AssistantResponse from "@/components/common/AssistantResponse";
@@ -15,6 +15,7 @@ import type {
   NotebookSaveMessage,
   NotebookSavePayload,
 } from "@/components/notebook/SaveToNotebookModal";
+import { ANTITAO_COACHES, useAntitaoCurriculum } from "@/lib/antitao";
 
 const SaveToNotebookModal = dynamic(
   () => import("@/components/notebook/SaveToNotebookModal"),
@@ -33,11 +34,22 @@ interface ChatMsg {
   thinking?: string[];
 }
 
+const TRACK_ICON_MAP: Record<string, LucideIcon> = {
+  seller: Store,
+  operator: Network,
+};
+
 export default function BotChatPage() {
   const params = useParams<{ botId?: string | string[] }>();
   const botId = firstParam(params?.botId);
   const router = useRouter();
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const curriculumLanguage = i18n.language.startsWith("zh") ? "zh" : "en";
+  const { tracks } = useAntitaoCurriculum(curriculumLanguage);
+  const coachMeta =
+    ANTITAO_COACHES.find((coach) => coach.botId === botId) ?? null;
+  const trackMeta = coachMeta ? tracks[coachMeta.trackId] : null;
+  const TrackIcon = coachMeta ? TRACK_ICON_MAP[coachMeta.trackId] ?? Bot : Bot;
 
   const [bot, setBot] = useState<BotInfo | null>(null);
   const [messages, setMessages] = useState<ChatMsg[]>([]);
@@ -237,10 +249,17 @@ export default function BotChatPage() {
         >
           <ArrowLeft className="h-4 w-4" />
         </button>
-        <Bot className="h-4 w-4 text-[var(--muted-foreground)]" />
-        <span className="text-[14px] font-medium text-[var(--foreground)]">
-          {bot?.name ?? botId}
-        </span>
+        <TrackIcon className="h-4 w-4 text-[var(--muted-foreground)]" />
+        <div className="min-w-0">
+          <span className="block truncate text-[14px] font-medium text-[var(--foreground)]">
+            {bot?.name ?? botId}
+          </span>
+          {trackMeta && (
+            <span className="block text-[11px] uppercase tracking-[0.18em] text-[var(--muted-foreground)]">
+              {trackMeta.badge}
+            </span>
+          )}
+        </div>
         {bot?.running && (
           <span className="h-2 w-2 rounded-full bg-emerald-500" />
         )}
@@ -272,13 +291,17 @@ export default function BotChatPage() {
           {messages.length === 0 && !streaming && (
             <div className="flex flex-col items-center justify-center pt-24 text-center">
               <div className="mb-3 rounded-xl bg-[var(--muted)] p-3 text-[var(--muted-foreground)]">
-                <Bot size={22} />
+                <TrackIcon size={22} />
               </div>
               <p className="text-[14px] font-medium text-[var(--foreground)]">
-                {t("Chat with {{name}}", { name: bot?.name ?? botId })}
+                {coachMeta
+                  ? trackMeta?.title || t(coachMeta.titleKey)
+                  : t("Chat with {{name}}", { name: bot?.name ?? botId })}
               </p>
               <p className="mt-1 text-[13px] text-[var(--muted-foreground)]">
-                {t("Send a message to start the conversation.")}
+                {coachMeta
+                  ? t(coachMeta.descriptionKey)
+                  : t("Send a message to start the conversation.")}
               </p>
             </div>
           )}

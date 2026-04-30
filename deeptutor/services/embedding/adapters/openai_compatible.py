@@ -100,6 +100,26 @@ class OpenAICompatibleEmbeddingAdapter(BaseEmbeddingAdapter):
     _RETRY_BACKOFF = 1.0
     _RATE_LIMIT_BACKOFF = 5.0
 
+    @staticmethod
+    def _is_retryable_exception(exc: Exception) -> bool:
+        """Treat transport-layer disconnects from lower stacks as retryable.
+
+        Some providers surface TLS/socket disconnects as ``anyio.EndOfStream`` or
+        ``httpcore`` exceptions instead of ``httpx.TransportError``. Those are
+        still safe to retry for idempotent embedding requests.
+        """
+        if isinstance(exc, httpx.TransportError):
+            return True
+
+        exc_type = type(exc)
+        module_name = exc_type.__module__
+        type_name = exc_type.__name__
+        if module_name.startswith("httpcore"):
+            return True
+        if module_name.startswith("anyio") and type_name in {"EndOfStream", "BrokenResourceError"}:
+            return True
+        return False
+
     def _should_send_dimensions(self, model_name: str | None) -> bool:
         """Decide whether to attach `dimensions` to the request payload.
 
@@ -183,14 +203,9 @@ class OpenAICompatibleEmbeddingAdapter(BaseEmbeddingAdapter):
                     response.raise_for_status()
                     data = response.json()
                 break
-            except httpx.TransportError as exc:
-                # httpx.TransportError covers all transient transport-layer
-                # failures: ConnectError, ReadError, WriteError, ConnectTimeout,
-                # ReadTimeout, WriteTimeout, PoolTimeout, RemoteProtocolError, etc.
-                # Retrying any of these with backoff is safe and obviates the
-                # need to keep extending an explicit allow-list.
+            except Exception as exc:
                 last_exc = exc
-                if attempt < self._MAX_RETRIES:
+                if self._is_retryable_exception(exc) and attempt < self._MAX_RETRIES:
                     wait = self._RETRY_BACKOFF * (2**attempt)
                     logger.warning(
                         f"Embedding request transport error ({type(exc).__name__}: {exc}) "
@@ -198,11 +213,13 @@ class OpenAICompatibleEmbeddingAdapter(BaseEmbeddingAdapter):
                         f"retrying in {wait:.1f}s..."
                     )
                     await asyncio.sleep(wait)
-                else:
+                elif self._is_retryable_exception(exc):
                     logger.error(
                         f"Embedding request failed after {1 + self._MAX_RETRIES} attempts "
                         f"({type(exc).__name__}: {exc})"
                     )
+                    raise
+                else:
                     raise
         else:
             if last_exc:

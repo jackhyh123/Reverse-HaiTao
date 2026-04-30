@@ -13,6 +13,7 @@ import {
 import { useTranslation } from "react-i18next";
 import { apiUrl } from "@/lib/api";
 import {
+  createNotebook,
   listNotebooks,
   type NotebookSummary as RealNotebookSummary,
 } from "@/lib/notebook-api";
@@ -157,6 +158,7 @@ export default function SaveToNotebookModal({
   const [summaryPreview, setSummaryPreview] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingNotebooks, setIsLoadingNotebooks] = useState(false);
+  const [isCreatingNotebook, setIsCreatingNotebook] = useState(false);
   const [error, setError] = useState("");
   const [selectedMessageIdx, setSelectedMessageIdx] = useState<Set<number>>(
     new Set(),
@@ -173,6 +175,7 @@ export default function SaveToNotebookModal({
     setSummaryPreview("");
     setError("");
     setSelectedIds([]);
+    setIsCreatingNotebook(false);
     setTitleEdited(false);
     if (hasMessageSelection && messages) {
       setSelectedMessageIdx(new Set(messages.map((_, idx) => idx)));
@@ -188,11 +191,12 @@ export default function SaveToNotebookModal({
         setNotebooks(list);
       } catch {
         setNotebooks([]);
+        setError(t("Failed to load notebooks. Please try again."));
       } finally {
         setIsLoadingNotebooks(false);
       }
     })();
-  }, [open, payload, messages, hasMessageSelection]);
+  }, [open, payload, messages, hasMessageSelection, t]);
 
   const orderedSelectedMessages = useMemo<NotebookSaveMessage[]>(() => {
     if (!hasMessageSelection || !messages) return [];
@@ -280,6 +284,25 @@ export default function SaveToNotebookModal({
   const selectLastTurns = (turnCount: number) => {
     if (!messages) return;
     setSelectedMessageIdx(new Set(indexesForLastTurns(messages, turnCount)));
+  };
+
+  const handleCreateDefaultNotebook = async () => {
+    setIsCreatingNotebook(true);
+    setError("");
+    try {
+      const notebook = await createNotebook({
+        name: t("Antitao Learning Notebook"),
+        description: t("Notes saved from Antitao learning conversations."),
+        color: "#F59E0B",
+        icon: "notebook-pen",
+      });
+      setNotebooks((prev) => [notebook, ...prev]);
+      setSelectedIds([notebook.id]);
+    } catch {
+      setError(t("Failed to create notebook. Please try again."));
+    } finally {
+      setIsCreatingNotebook(false);
+    }
   };
 
   const handleSave = async () => {
@@ -544,8 +567,19 @@ export default function SaveToNotebookModal({
                   <NotebookPen className="h-5 w-5 text-[var(--muted-foreground)]/60" />
                   <span>{t("No notebooks found.")}</span>
                   <span className="text-[11px] text-[var(--muted-foreground)]/80">
-                    {t("Create one from the Knowledge → Notebooks page.")}
+                    {t("Create one here and it will be selected automatically.")}
                   </span>
+                  <button
+                    type="button"
+                    onClick={handleCreateDefaultNotebook}
+                    disabled={isCreatingNotebook}
+                    className="mt-2 inline-flex items-center gap-2 rounded-lg bg-[var(--primary)] px-3 py-1.5 text-xs font-medium text-[var(--primary-foreground)] transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {isCreatingNotebook && (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    )}
+                    {t("Create Antitao Learning Notebook")}
+                  </button>
                 </div>
               ) : (
                 notebooks.map((notebook) => {

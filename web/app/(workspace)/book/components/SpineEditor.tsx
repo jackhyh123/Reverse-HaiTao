@@ -9,6 +9,7 @@ import {
   Loader2,
 } from "lucide-react";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import type { Chapter, ContentType, Spine } from "@/lib/book-types";
 
 /**
@@ -21,37 +22,35 @@ import type { Chapter, ContentType, Spine } from "@/lib/book-types";
  */
 interface ContentTypeOption {
   value: ContentType;
-  label: string;
-  description: string;
+  labelKey: string;
+  descriptionKey: string;
 }
 
 const CONTENT_TYPE_OPTIONS: ContentTypeOption[] = [
   {
     value: "theory",
-    label: "Theory",
-    description: "Long-form explanation with diagrams + flash cards + a quiz.",
+    labelKey: "book.spine.type.theory",
+    descriptionKey: "book.spine.type.theoryDesc",
   },
   {
     value: "derivation",
-    label: "Derivation",
-    description:
-      "Step-by-step derivation, often with animation + verifying code.",
+    labelKey: "book.spine.type.derivation",
+    descriptionKey: "book.spine.type.derivationDesc",
   },
   {
     value: "history",
-    label: "History",
-    description: "Narrative + timeline + period image, ends with a recap quiz.",
+    labelKey: "book.spine.type.history",
+    descriptionKey: "book.spine.type.historyDesc",
   },
   {
     value: "practice",
-    label: "Practice",
-    description:
-      "Quiz-heavy chapter with a runnable code scaffold + explanation.",
+    labelKey: "book.spine.type.practice",
+    descriptionKey: "book.spine.type.practiceDesc",
   },
   {
     value: "concept",
-    label: "Concept",
-    description: "Definition + figure + flash cards + common-pitfall callout.",
+    labelKey: "book.spine.type.concept",
+    descriptionKey: "book.spine.type.conceptDesc",
   },
 ];
 
@@ -66,6 +65,7 @@ export default function SpineEditor({
   onConfirm,
   loading = false,
 }: SpineEditorProps) {
+  const { t } = useTranslation();
   const [chapters, setChapters] = useState<Chapter[]>(spine.chapters);
 
   const updateChapter = (idx: number, patch: Partial<Chapter>) => {
@@ -95,7 +95,7 @@ export default function SpineEditor({
       ...prev,
       {
         id: `ch_new_${prev.length + 1}_${Date.now().toString(36)}`,
-        title: "New chapter",
+        title: t("book.spine.newChapter"),
         learning_objectives: [],
         content_type: "theory",
         source_anchors: [],
@@ -118,10 +118,10 @@ export default function SpineEditor({
     <div className="flex h-full flex-col">
       <header className="border-b border-[var(--border)] bg-[var(--card)]/60 px-6 py-4">
         <h2 className="text-lg font-semibold text-[var(--foreground)]">
-          Review the chapter spine
+          {t("book.spine.title")}
         </h2>
         <p className="mt-1 text-sm text-[var(--muted-foreground)]">
-          Reorder, rename, or remove chapters before the book starts compiling.
+          {t("book.spine.subtitle")}
         </p>
       </header>
 
@@ -167,10 +167,10 @@ export default function SpineEditor({
               <div className="mt-3 grid gap-3 sm:grid-cols-2">
                 <label className="text-xs text-[var(--muted-foreground)]">
                   <span className="flex items-center gap-1">
-                    Content type
+                    {t("book.spine.contentType")}
                     <span
                       className="cursor-help text-[10px] opacity-60"
-                      title="Hint that drives the chapter's block plan (text length, whether to include diagrams / quizzes / code, etc.)."
+                      title={t("book.spine.contentTypeHelp")}
                     >
                       ⓘ
                     </span>
@@ -186,32 +186,33 @@ export default function SpineEditor({
                   >
                     {CONTENT_TYPE_OPTIONS.map((opt) => (
                       <option key={opt.value} value={opt.value}>
-                        {opt.label}
+                        {t(opt.labelKey)}
                       </option>
                     ))}
                   </select>
                   <span className="mt-1 block text-[11px] leading-snug text-[var(--muted-foreground)]/80">
-                    {CONTENT_TYPE_OPTIONS.find(
-                      (o) => o.value === chapter.content_type,
-                    )?.description ||
-                      "Hint for the architect about what blocks to plan."}
+                    {t(
+                      CONTENT_TYPE_OPTIONS.find(
+                        (o) => o.value === chapter.content_type,
+                      )?.descriptionKey || "book.spine.architectHint",
+                    )}
                   </span>
                 </label>
                 <label className="text-xs text-[var(--muted-foreground)]">
-                  Summary
+                  {t("book.spine.summary")}
                   <input
                     value={chapter.summary}
                     onChange={(e) =>
                       updateChapter(idx, { summary: e.target.value })
                     }
-                    placeholder="Optional one-line description"
+                    placeholder={t("book.spine.summaryPlaceholder")}
                     className="mt-1 w-full rounded-md border border-[var(--border)] bg-[var(--background)] px-2 py-1.5 text-sm text-[var(--foreground)]"
                   />
                 </label>
               </div>
 
               <label className="mt-3 block text-xs text-[var(--muted-foreground)]">
-                Learning objectives (one per line)
+                {t("book.spine.learningObjectives")}
                 <textarea
                   value={chapter.learning_objectives.join("\n")}
                   onChange={(e) =>
@@ -233,7 +234,7 @@ export default function SpineEditor({
             onClick={addChapter}
             className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-dashed border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm font-medium text-[var(--muted-foreground)] hover:border-[var(--primary)]/40 hover:text-[var(--primary)]"
           >
-            <Plus className="h-4 w-4" /> Add chapter
+            <Plus className="h-4 w-4" /> {t("book.spine.addChapter")}
           </button>
         </div>
       </div>
@@ -249,7 +250,7 @@ export default function SpineEditor({
           ) : (
             <CheckCircle2 className="h-4 w-4" />
           )}
-          Confirm spine & start compiling
+          {t("book.spine.confirm")}
         </button>
       </footer>
     </div>

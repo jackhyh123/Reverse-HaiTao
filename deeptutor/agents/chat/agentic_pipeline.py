@@ -1184,7 +1184,10 @@ class AgenticChatPipeline:
         if turn_id:
             task_dir = get_path_service().get_task_workspace("chat", turn_id)
         if tool_name == "rag" and context.knowledge_bases:
-            kwargs.setdefault("kb_name", context.knowledge_bases[0])
+            # Always pin RAG to the active chat KB. Allowing the model to emit
+            # its own kb_name (for example "default") can silently bypass the
+            # user's selected knowledge base and search a stale or empty index.
+            kwargs["kb_name"] = context.knowledge_bases[0]
             kwargs.setdefault("mode", "hybrid")
         elif tool_name == "code_execution":
             kwargs.setdefault("intent", context.user_message)

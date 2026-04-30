@@ -1,8 +1,26 @@
 <div align="center">
 
-<img src="assets/logo-ver2.png" alt="DeepTutor" width="140" style="border-radius: 15px;">
+<img src="assets/logo-ver2.png" alt="反淘淘金通关系统" width="140" style="border-radius: 15px;">
 
-# DeepTutor: Agent-Native Personalized Tutoring
+# 反淘淘金通关系统 🎯
+
+### AI 驱动的跨境反向海淘通关学习平台
+
+> 🎥 [使用指南 & 演示视频](GUIDE.md)
+
+[![License](https://img.shields.io/badge/License-Apache_2.0-blue?style=flat-square)](LICENSE) [![Based on DeepTutor](https://img.shields.io/badge/Based_on-DeepTutor_v1.2.5-4B8BBE?style=flat-square)](https://github.com/HKUDS/DeepTutor)
+
+---
+
+## 🙏 特别鸣谢
+
+本项目基于 **[HKUDS/DeepTutor](https://github.com/HKUDS/DeepTutor)**（20K+ ⭐）开源项目定制开发。DeepTutor 是香港大学数据科学实验室（HKUDS）出品的 Agent-Native 个性化辅导平台，为本项目提供了强大的 AI Agent 引擎、RAG 知识库和多智能体协作框架。
+
+<a href="https://github.com/HKUDS/DeepTutor" target="_blank"><img src="https://img.shields.io/badge/⭐_HKUDS/DeepTutor-20K%2B_Stars-brightgreen?style=for-the-badge&logo=github" alt="HKUDS/DeepTutor"></a>
+
+---
+
+## 📖 原项目信息
 
 <a href="https://trendshift.io/repositories/17099" target="_blank"><img src="https://trendshift.io/api/badge/repositories/17099" alt="HKUDS%2FDeepTutor | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/></a>
 

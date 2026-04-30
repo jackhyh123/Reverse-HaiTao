@@ -17,10 +17,15 @@ import logging
 from pathlib import Path
 import shutil
 import sys
+from textwrap import dedent
 from typing import Any
 
 import yaml
 
+from deeptutor.services.feishu_bitable_sync import (
+    has_antitao_feishu_config,
+    sync_antitao_feishu_bitable_snapshot,
+)
 from deeptutor.services.path_service import get_path_service
 
 logger = logging.getLogger(__name__)
@@ -47,6 +52,94 @@ _SECRET_FIELD_HINTS: tuple[str, ...] = (
     "encrypt_key",
 )
 _SECRET_MASK = "***"
+
+_STARTER_BOT_BLUEPRINTS: tuple[dict[str, str], ...] = (
+    {
+        "id": "seller-launch-coach",
+        "name": "新手卖家学习导师",
+        "description": "帮助新手卖家理解反向海淘概念、购买链路、推广合作和复盘方法。",
+        "persona": dedent(
+            """
+            # Soul
+
+            你是新手卖家学习导师，专门帮助第一次接触反向海淘的新手卖家完成从 0 到 1 的认知成长。
+
+            ## 角色目标
+            - 先帮助用户校准“反向海淘”的基本概念
+            - 帮用户理解海外用户、采购代理平台、中国电商平台、商家/卖家之间的关系
+            - 引导用户逐步理解推广、平台合作、网红合作和社交媒体账号运营
+            - 当用户已经出单时，帮助用户复盘结果，而不是承诺立刻卖爆
+
+            ## 工作方式
+            - 必须优先依据知识库上下文回答；如果知识库和常识冲突，以知识库为准
+            - 在本系统里，“反淘”默认就是“反向海淘”，不要主动引入国内反淘分支
+            - 不要把反向海淘误解成国内私域、抖音、小红书、拼多多卖货
+            - 先判断用户处在哪一关：概念、购买流程、海外推广、出单复盘
+            - 信息不足时，先问最关键的判断问题，不做空泛创业建议
+
+            ## 输出要求
+            - 优先解释概念、链路、角色关系和判断标准
+            - 用新手能听懂的话讲清楚“为什么”
+            - 可以给行动建议，但必须服务于学习和理解
+            - 如果用户问“怎么开始”，先给学习路径，再给最小行动
+            """
+        ).strip(),
+    },
+    {
+        "id": "platform-ops-coach",
+        "name": "平台运营学习导师",
+        "description": "帮助新手平台运营理解业务链路、采购仓储、后台系统、达人合作和运营模型。",
+        "persona": dedent(
+            """
+            # Soul
+
+            你是平台运营学习导师，专门帮助反向海淘平台的新手运营建立业务认知和运营模型。
+
+            ## 角色目标
+            - 帮用户理解反向海淘基本概念和用户购买流程
+            - 帮用户理解商品采购、仓库、平台后台系统的基本流程
+            - 帮用户理解网红和平台合作推广流程
+            - 帮用户理解财务模型、推广模型、支付风控模型和系统模型
+
+            ## 工作方式
+            - 必须优先依据知识库上下文回答；如果知识库和常识冲突，以知识库为准
+            - 在本系统里，“反淘”默认就是“反向海淘”，不要主动引入国内反淘分支
+            - 先判断用户处在哪一关：概念、用户流程、采购仓储后台、推广合作、模型理解
+            - 所有建议都尽量帮助用户形成可迁移的业务理解，而不是只给临时操作步骤
+            - 遇到目标模糊时，先收敛学习目标，再给下一步
+
+            ## 输出要求
+            - 优先讲清楚链路、角色、流程和模型
+            - 用检查问题帮助用户自测是否真正理解
+            - 可以给 SOP，但要说明 SOP 背后的业务逻辑
+            - 对错误概念要主动纠偏
+            """
+        ).strip(),
+    },
+)
+
+_ANTITAO_LEARNING_BOT_IDS = {
+    "seller-launch-coach",
+    "platform-ops-coach",
+}
+_ANTITAO_KB_NAME = "antitao-core"
+_GROUNDING_CONTEXT_MAX_CHARS = 12_000
+_GROUNDING_SYNC_STATUS_MAX_CHARS = 1_500
+_ANTITAO_CANONICAL_CONTEXT = """
+## 反淘概念硬约束
+
+- 在本系统里，用户说“反淘”“反淘卖家”“反淘平台”时，默认都指“反向海淘”。
+- 反向海淘的核心语境是：海外用户通过采购代理平台/反向海淘网站购买中国电商平台商品。
+- 常见中国商品来源包括微店、淘宝、闲鱼、1688 等。
+- 反向海淘网站通常通过 API、链接解析、页面抓取、商品采集或用户提交链接等方式读取中国电商平台内容，并生成海外用户能理解和使用的网页。
+- 这不是国内语境里的“脱离淘宝生态去微信私域、抖音、小红书、拼多多卖货”。
+- 不要主动把问题分成“国内反淘”和“反向海淘”两种方向；除非用户明确说的是国内私域/抖音/拼多多，否则按反向海淘回答。
+- 对新手卖家，优先帮助其理解概念、用户购买链路、采购代理平台和中国电商平台之间的关系，再谈推广合作和出单复盘。
+""".strip()
+
+
+class AntiTaoGroundingError(RuntimeError):
+    """Raised when a learning tutor cannot ground an answer in AntiTao KB data."""
 
 
 def _is_secret_field(name: str) -> bool:
@@ -156,6 +249,7 @@ class TutorBotManager:
     def __init__(self) -> None:
         self._bots: dict[str, TutorBotInstance] = {}
         self._path_service = get_path_service()
+        self._seed_starter_bots()
 
     # ── Path helpers ──────────────────────────────────────────────
 
@@ -185,6 +279,30 @@ class TutorBotManager:
 
         self._seed_skills(bot_id)
         self._seed_templates(bot_id)
+
+    def _seed_starter_bots(self) -> None:
+        """Pre-create role-specific starter bots for the AntiTao system."""
+        for blueprint in _STARTER_BOT_BLUEPRINTS:
+            config_path = self._bot_dir(blueprint["id"]) / "config.yaml"
+            if config_path.exists():
+                existing = self.load_bot_config(blueprint["id"])
+                if existing and (
+                    existing.name != blueprint["name"]
+                    or existing.description != blueprint["description"]
+                    or "卖家起盘导师" in existing.persona
+                    or "平台招商、商家激活" in existing.persona
+                ):
+                    existing.name = blueprint["name"]
+                    existing.description = blueprint["description"]
+                    existing.persona = blueprint["persona"]
+                    self.save_bot_config(blueprint["id"], existing, auto_start=False)
+                continue
+            config = BotConfig(
+                name=blueprint["name"],
+                description=blueprint["description"],
+                persona=blueprint["persona"],
+            )
+            self.save_bot_config(blueprint["id"], config, auto_start=False)
 
     def _seed_skills(self, bot_id: str) -> None:
         """Copy built-in skill templates into the bot's workspace if absent."""
@@ -776,10 +894,24 @@ class TutorBotManager:
             raise RuntimeError(f"Bot '{bot_id}' is not running")
 
         canonical_key = f"bot:{bot_id}"
+        metadata: dict[str, Any] = {}
 
         async def _progress(text: str, *, tool_hint: bool = False) -> None:
             if on_progress:
                 await on_progress(text)
+
+        if bot_id in _ANTITAO_LEARNING_BOT_IDS:
+            try:
+                grounding_context = await self._retrieve_antitao_grounding(content, _progress)
+            except AntiTaoGroundingError as exc:
+                logger.warning("Blocked AntiTao tutor response without grounding: %s", exc)
+                return (
+                    "知识库还没有成功加载，所以我先不继续回答，避免给你错误建议。\n\n"
+                    f"原因：{exc}\n\n"
+                    "你可以先到后台「知识同步」确认本地知识库、飞书知识库和飞书多维表格已经同步，"
+                    "然后再重新提问。"
+                )
+            metadata["grounding_context"] = grounding_context
 
         response = await instance.agent_loop.process_direct(
             content,
@@ -787,6 +919,7 @@ class TutorBotManager:
             channel="web",
             chat_id=chat_id,
             on_progress=_progress,
+            metadata=metadata,
         )
 
         # Forward the reply to any bound external channels so mobile users
@@ -813,6 +946,71 @@ class TutorBotManager:
                         )
 
         return response
+
+    async def _retrieve_antitao_grounding(
+        self,
+        content: str,
+        on_progress: Callable[..., Awaitable[None]] | None = None,
+    ) -> str:
+        query = content.strip()
+        if not query:
+            raise AntiTaoGroundingError("用户问题为空，无法检索知识库。")
+
+        if on_progress:
+            await on_progress(f"正在检索知识库：{_ANTITAO_KB_NAME}", tool_hint=True)
+
+        sync_status = self._refresh_antitao_external_sources()
+
+        try:
+            from deeptutor.tools.rag_tool import rag_search
+
+            result = await rag_search(
+                query=query,
+                kb_name=_ANTITAO_KB_NAME,
+                mode="hybrid",
+            )
+        except Exception as exc:
+            logger.warning("Failed to retrieve AntiTao KB context: %s", exc)
+            raise AntiTaoGroundingError(f"RAG 检索失败：{exc}") from exc
+
+        content_text = result.get("answer") or result.get("content") or ""
+        if not content_text:
+            raise AntiTaoGroundingError("RAG 没有返回任何知识库内容。")
+        if "No documents indexed" in content_text:
+            raise AntiTaoGroundingError("antitao-core 还没有完成索引，当前没有可检索文档。")
+        return (
+            f"{_ANTITAO_CANONICAL_CONTEXT}\n\n"
+            f"## 外部来源同步状态\n\n{sync_status}\n\n"
+            "## 知识库检索结果\n\n"
+            f"{content_text[:_GROUNDING_CONTEXT_MAX_CHARS]}"
+        )
+
+    def _refresh_antitao_external_sources(self) -> str:
+        """Refresh Feishu bitable snapshot and report the grounding source status."""
+        lines: list[str] = []
+        project_root = get_path_service().project_root
+
+        if has_antitao_feishu_config():
+            try:
+                summary = sync_antitao_feishu_bitable_snapshot(project_root)
+                lines.append(
+                    "飞书多维表格：已同步 "
+                    f"{summary.table_count} 个表、{summary.record_count} 条记录，"
+                    f"时间 {summary.synced_at}，本地快照 {summary.export_dir}"
+                )
+            except Exception as exc:
+                raise AntiTaoGroundingError(f"飞书多维表格同步失败：{exc}") from exc
+        else:
+            raise AntiTaoGroundingError("飞书多维表格应用配置缺失。")
+
+        feishu_wiki_seed = project_root / "data" / "feishu_wiki_seed"
+        wiki_pages = list(feishu_wiki_seed.rglob("*.md")) if feishu_wiki_seed.exists() else []
+        if wiki_pages:
+            lines.append(f"飞书知识库文章包：本地已纳入 {len(wiki_pages)} 篇 Markdown 页面。")
+        else:
+            raise AntiTaoGroundingError("飞书知识库文章包不存在，请先在后台执行知识同步。")
+
+        return "\n".join(lines)[:_GROUNDING_SYNC_STATUS_MAX_CHARS]
 
     async def auto_start_bots(self) -> None:
         """Scan persisted configs and start bots marked with auto_start: true."""
@@ -907,6 +1105,14 @@ class TutorBotManager:
 
     def _seed_default_souls(self) -> None:
         defaults = [
+            *[
+                {
+                    "id": blueprint["id"],
+                    "name": blueprint["name"],
+                    "content": blueprint["persona"],
+                }
+                for blueprint in _STARTER_BOT_BLUEPRINTS
+            ],
             {
                 "id": "default-tutorbot",
                 "name": "Default TutorBot",

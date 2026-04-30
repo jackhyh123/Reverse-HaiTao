@@ -80,6 +80,7 @@ async def lifespan(app: FastAPI):
     """
     # Execute on startup
     logger.info("Application startup")
+    antitao_sync_task = None
 
     # Validate configuration consistency
     validate_tool_consistency()
@@ -104,6 +105,24 @@ async def lifespan(app: FastAPI):
         logger.warning(f"Failed to start EventBus: {e}")
 
     try:
+        from deeptutor.services.antitao_seed import (
+            bootstrap_antitao_knowledge_base,
+            hydrate_antitao_knowledge_base,
+        )
+
+        bootstrap_antitao_knowledge_base()
+        await hydrate_antitao_knowledge_base()
+    except Exception as e:
+        logger.warning(f"Failed to seed AntiTao knowledge base: {e}")
+
+    try:
+        from deeptutor.services.antitao_auto_sync import start_antitao_auto_sync
+
+        antitao_sync_task = start_antitao_auto_sync()
+    except Exception as e:
+        logger.warning(f"Failed to start AntiTao knowledge auto sync: {e}")
+
+    try:
         from deeptutor.services.tutorbot import get_tutorbot_manager
 
         await get_tutorbot_manager().auto_start_bots()
@@ -114,6 +133,13 @@ async def lifespan(app: FastAPI):
 
     # Execute on shutdown
     logger.info("Application shutdown")
+
+    try:
+        from deeptutor.services.antitao_auto_sync import stop_antitao_auto_sync
+
+        await stop_antitao_auto_sync(antitao_sync_task)
+    except Exception as e:
+        logger.warning(f"Failed to stop AntiTao knowledge auto sync: {e}")
 
     # Stop TutorBots
     try:
@@ -136,7 +162,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="DeepTutor API",
+    title="反淘淘金通关系统 API",
     version="1.0.0",
     lifespan=lifespan,
     # Disable automatic trailing slash redirects to prevent protocol downgrade issues
@@ -198,13 +224,19 @@ app.mount(
 # Import routers only after runtime settings are initialized.
 # Some router modules load YAML settings at import time.
 from deeptutor.api.routers import (
+    admin_members,
     agent_config,
+    antitao_curriculum,
     attachments,
+    auth,
     book,
     chat,
     co_writer,
     dashboard,
+    feishu_wiki_sync,
+    feedback,
     knowledge,
+    knowledge_graph,
     memory,
     notebook,
     plugins_api,
@@ -239,9 +271,27 @@ app.include_router(skills.router, prefix="/api/v1/skills", tags=["skills"])
 app.include_router(system.router, prefix="/api/v1/system", tags=["system"])
 app.include_router(plugins_api.router, prefix="/api/v1/plugins", tags=["plugins"])
 app.include_router(agent_config.router, prefix="/api/v1/agent-config", tags=["agent-config"])
+app.include_router(
+    antitao_curriculum.router,
+    prefix="/api/v1/antitao-curriculum",
+    tags=["antitao-curriculum"],
+)
 app.include_router(vision_solver.router, prefix="/api/v1", tags=["vision-solver"])
 app.include_router(tutorbot.router, prefix="/api/v1/tutorbot", tags=["tutorbot"])
 app.include_router(attachments.router, prefix="/api/attachments", tags=["attachments"])
+app.include_router(auth.router, prefix="/api/v1/auth", tags=["auth"])
+app.include_router(feedback.router, prefix="/api/v1/feedback", tags=["feedback"])
+app.include_router(admin_members.router, prefix="/api/v1/admin", tags=["admin"])
+app.include_router(
+    feishu_wiki_sync.router,
+    prefix="/api/v1/admin",
+    tags=["admin"],
+)
+app.include_router(
+    knowledge_graph.router,
+    prefix="/api/v1/knowledge-graph",
+    tags=["knowledge-graph"],
+)
 
 # Unified WebSocket endpoint
 app.include_router(unified_ws.router, prefix="/api/v1", tags=["unified-ws"])
@@ -249,7 +299,7 @@ app.include_router(unified_ws.router, prefix="/api/v1", tags=["unified-ws"])
 
 @app.get("/")
 async def root():
-    return {"message": "Welcome to DeepTutor API"}
+    return {"message": "Welcome to 反淘淘金通关系统 API"}
 
 
 if __name__ == "__main__":

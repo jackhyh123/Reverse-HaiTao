@@ -174,7 +174,7 @@ function createSessionEntry(
     messages: [],
     isStreaming: false,
     currentStage: "",
-    language: typeof window === "undefined" ? "en" : readStoredLanguage(),
+    language: typeof window === "undefined" ? "zh" : readStoredLanguage(),
     status: "idle",
     activeTurnId: null,
     lastSeq: 0,
@@ -747,7 +747,7 @@ export function UnifiedChatProvider({
         knowledgeBases: Array.isArray(session.preferences?.knowledge_bases)
           ? session.preferences.knowledge_bases
           : [],
-        language: session.preferences?.language || "en",
+        language: session.preferences?.language || "zh",
       });
       if (activeTurn?.turn_id || activeTurn?.id) {
         const key = session.session_id || session.id;

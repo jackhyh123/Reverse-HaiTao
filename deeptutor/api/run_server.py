@@ -29,6 +29,13 @@ def main() -> None:
     # Get project root directory
     project_root = Path(__file__).parent.parent.parent
 
+    # Load .env before any module imports that read os.environ
+    _env_path = project_root / ".env"
+    if _env_path.exists():
+        from dotenv import load_dotenv
+
+        load_dotenv(_env_path, override=True)
+
     # Change to project root to ensure correct module imports
     os.chdir(str(project_root))
 

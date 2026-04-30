@@ -3,25 +3,35 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Bot,
+  BriefcaseBusiness,
   Eye,
   EyeOff,
   FileText,
   Heart,
   Loader2,
   MessageCircle,
+  Network,
   Pencil,
   Play,
   Plus,
   Save,
   Settings2,
+  Store,
   Square,
   Trash2,
   X,
+  type LucideIcon,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useTranslation } from "react-i18next";
 import dynamic from "next/dynamic";
 import { apiUrl } from "@/lib/api";
+import { BrandMark } from "@/components/branding/BrandMark";
+import {
+  ANTITAO_COACHES,
+  type AntitaoCoachDefinition,
+  useAntitaoCurriculum,
+} from "@/lib/antitao";
 
 const MarkdownRenderer = dynamic(
   () => import("@/components/common/MarkdownRenderer"),
@@ -67,6 +77,11 @@ const BOT_FILES = [
   "HEARTBEAT.md",
 ] as const;
 type BotFile = (typeof BOT_FILES)[number];
+
+const TRACK_ICON_MAP: Record<AntitaoCoachDefinition["trackId"], LucideIcon> = {
+  seller: Store,
+  operator: Network,
+};
 
 /* ── Main Page ──────────────────────────────────────────── */
 
@@ -114,16 +129,24 @@ export default function AgentsPage() {
       <div className="mx-auto max-w-[960px] px-6 py-8">
         {/* Header */}
         <div className="mb-6">
-          <h1 className="text-[24px] font-semibold tracking-tight text-[var(--foreground)]">
-            {t("TutorBot Agents")}
-          </h1>
+          <div className="flex items-center gap-4">
+            <BrandMark size="md" />
+            <div>
+              <div className="text-[11px] font-semibold uppercase tracking-[0.28em] text-[var(--muted-foreground)]">
+                {t("agents.eyebrow")}
+              </div>
+              <h1 className="mt-1 text-[28px] font-semibold tracking-tight text-[var(--foreground)]">
+                {t("agents.title")}
+              </h1>
+            </div>
+          </div>
           {toast ? (
             <p className="mt-1 text-[13px] text-[var(--primary)] animate-fade-in">
               {toast}
             </p>
           ) : (
             <p className="mt-1 text-[13px] text-[var(--muted-foreground)]">
-              {t("Manage your in-process TutorBot instances")}
+              {t("agents.subtitle")}
             </p>
           )}
         </div>
@@ -131,10 +154,10 @@ export default function AgentsPage() {
         {/* Tabs */}
         <div className="mb-6 flex items-center gap-1 border-b border-[var(--border)]/50 pb-3">
           {[
-            { key: "bots" as Tab, label: t("Bots"), icon: Bot },
-            { key: "profiles" as Tab, label: t("Profiles"), icon: FileText },
-            { key: "channels" as Tab, label: t("Channels"), icon: Settings2 },
-            { key: "souls" as Tab, label: t("Soul Templates"), icon: Heart },
+            { key: "bots" as Tab, label: t("agents.tabs.coaches"), icon: Bot },
+            { key: "profiles" as Tab, label: t("agents.tabs.profiles"), icon: FileText },
+            { key: "channels" as Tab, label: t("agents.tabs.channels"), icon: Settings2 },
+            { key: "souls" as Tab, label: t("agents.tabs.prompts"), icon: Heart },
           ].map((tab) => {
             const Icon = tab.icon;
             const active = activeTab === tab.key;
@@ -479,7 +502,9 @@ function ChannelsTab({
   onToast: (msg: string) => void;
   onReload: () => Promise<void>;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const curriculumLanguage = i18n.language.startsWith("zh") ? "zh" : "en";
+  const { tracks } = useAntitaoCurriculum(curriculumLanguage);
   const [selectedBot, setSelectedBot] = useState("");
   const [schemaCatalog, setSchemaCatalog] =
     useState<ChannelsSchemaResponse | null>(null);
@@ -830,9 +855,28 @@ function BotsTab({
   onToast: (msg: string) => void;
   router: ReturnType<typeof useRouter>;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const curriculumLanguage = i18n.language.startsWith("zh") ? "zh" : "en";
+  const { tracks } = useAntitaoCurriculum(curriculumLanguage);
   const [showCreate, setShowCreate] = useState(false);
   const [creating, setCreating] = useState(false);
+
+  const featuredCoaches = useMemo(
+    () =>
+      ANTITAO_COACHES.map((coach) => ({
+        coach,
+        bot: bots.find((item) => item.bot_id === coach.botId) ?? null,
+      })),
+    [bots],
+  );
+  const featuredCoachIds = useMemo(
+    () => new Set(ANTITAO_COACHES.map((coach) => coach.botId)),
+    [],
+  );
+  const additionalBots = useMemo(
+    () => bots.filter((bot) => !featuredCoachIds.has(bot.bot_id)),
+    [bots, featuredCoachIds],
+  );
 
   const [formName, setFormName] = useState("");
   const [formDesc, setFormDesc] = useState("");
@@ -964,6 +1008,96 @@ function BotsTab({
 
   return (
     <>
+      <div className="mb-6 grid gap-4 md:grid-cols-2">
+        {featuredCoaches.map(({ coach, bot }) => {
+          const track = tracks[coach.trackId];
+          const Icon = TRACK_ICON_MAP[coach.trackId];
+          const isRunning = Boolean(bot?.running);
+          const displayName = t(coach.titleKey);
+          return (
+            <div
+              key={coach.botId}
+              className="rounded-2xl border border-[var(--border)]/70 bg-[linear-gradient(180deg,rgba(255,255,255,0.02),rgba(255,255,255,0))] p-5"
+            >
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <div className="inline-flex rounded-full border border-[var(--border)]/60 bg-[var(--secondary)]/55 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.22em] text-[var(--muted-foreground)]">
+                    {track.badge}
+                  </div>
+                  <h2 className="mt-4 text-[22px] font-semibold tracking-[-0.03em] text-[var(--foreground)]">
+                    {displayName}
+                  </h2>
+                  <p className="mt-2 text-[14px] leading-7 text-[var(--muted-foreground)]">
+                    {t(coach.descriptionKey)}
+                  </p>
+                </div>
+                <div className="rounded-2xl border border-[var(--border)]/70 bg-[var(--secondary)]/55 p-3 text-[var(--foreground)]">
+                  <Icon size={20} />
+                </div>
+              </div>
+
+              <div className="mt-4 rounded-2xl border border-[var(--border)]/60 bg-[var(--background)]/35 px-4 py-3 text-[13px] leading-6 text-[var(--muted-foreground)]">
+                {t(coach.focusKey)}
+              </div>
+
+              <div className="mt-4 flex items-center gap-2 text-[12px] text-[var(--muted-foreground)]">
+                <span
+                  className={`h-2 w-2 rounded-full ${isRunning ? "bg-emerald-500" : "bg-[var(--muted-foreground)]/40"}`}
+                />
+                <span>
+                  {isRunning ? t("agents.status.running") : t("agents.status.ready")}
+                </span>
+              </div>
+
+              <div className="mt-5 flex flex-wrap gap-2">
+                {isRunning ? (
+                  <>
+                    <button
+                      onClick={() => router.push(`/agents/${coach.botId}/chat`)}
+                      className="inline-flex items-center gap-1.5 rounded-xl bg-[var(--primary)] px-4 py-2 text-[13px] font-semibold text-[var(--primary-foreground)] transition-opacity hover:opacity-90"
+                    >
+                      <MessageCircle className="h-3.5 w-3.5" />
+                      {t("agents.openCoach")}
+                    </button>
+                    <button
+                      onClick={() => stopBot(coach.botId)}
+                      className="inline-flex items-center gap-1.5 rounded-xl border border-[var(--border)]/60 px-4 py-2 text-[13px] font-medium text-red-400 transition-colors hover:border-red-400/50"
+                    >
+                      <Square className="h-3.5 w-3.5" />
+                      {t("Stop")}
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    onClick={() => startBot(coach.botId)}
+                    className="inline-flex items-center gap-1.5 rounded-xl bg-[var(--primary)] px-4 py-2 text-[13px] font-semibold text-[var(--primary-foreground)] transition-opacity hover:opacity-90"
+                  >
+                    <Play className="h-3.5 w-3.5" />
+                    {t("agents.activateCoach")}
+                  </button>
+                )}
+                <button
+                  onClick={() => setShowCreate(true)}
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-[var(--border)]/60 px-4 py-2 text-[13px] font-medium text-[var(--muted-foreground)] transition-colors hover:border-[var(--border)] hover:text-[var(--foreground)]"
+                >
+                  <BriefcaseBusiness className="h-3.5 w-3.5" />
+                  {t("agents.customCoach")}
+                </button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="mb-5 rounded-2xl border border-[var(--border)]/60 bg-[var(--secondary)]/35 px-4 py-4">
+        <div className="text-[13px] font-medium text-[var(--foreground)]">
+          {t("agents.roleEntryTitle")}
+        </div>
+        <p className="mt-1 text-[13px] leading-6 text-[var(--muted-foreground)]">
+          {t("agents.roleEntrySubtitle")}
+        </p>
+      </div>
+
       {/* New Bot button */}
       <div className="mb-4 flex justify-end">
         <button
@@ -971,7 +1105,7 @@ function BotsTab({
           className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)]/50 px-3 py-1.5 text-[12px] font-medium text-[var(--muted-foreground)] transition-colors hover:border-[var(--border)] hover:text-[var(--foreground)]"
         >
           <Plus className="h-3 w-3" />
-          {t("New Bot")}
+          {t("agents.newSpecialistCoach")}
         </button>
       </div>
 
@@ -980,7 +1114,7 @@ function BotsTab({
         <div className="mb-6 rounded-xl border border-[var(--border)] p-5">
           <div className="mb-4 flex items-center justify-between">
             <h2 className="text-[15px] font-medium text-[var(--foreground)]">
-              {t("Create TutorBot")}
+              {t("agents.createCoachTitle")}
             </h2>
             <button
               onClick={() => {
@@ -1005,7 +1139,7 @@ function BotsTab({
               />
               {botId && (
                 <p className="mt-1 text-[11px] text-[var(--muted-foreground)]">
-                  ID: {botId}
+                  {t("ID")}: {botId}
                 </p>
               )}
             </div>
@@ -1119,9 +1253,21 @@ function BotsTab({
             {t("Create your first TutorBot to get started.")}
           </p>
         </div>
+      ) : additionalBots.length === 0 ? (
+        <div className="rounded-2xl border border-dashed border-[var(--border)]/70 px-6 py-10 text-center">
+          <div className="mx-auto mb-3 flex h-11 w-11 items-center justify-center rounded-2xl bg-[var(--secondary)]/70 text-[var(--muted-foreground)]">
+            <Bot size={18} />
+          </div>
+          <p className="text-[14px] font-medium text-[var(--foreground)]">
+            {t("agents.noExtraBots")}
+          </p>
+          <p className="mt-1.5 text-[13px] text-[var(--muted-foreground)]">
+            {t("agents.noExtraBotsHint")}
+          </p>
+        </div>
       ) : (
         <div className="grid gap-3">
-          {bots.map((bot) => (
+          {additionalBots.map((bot) => (
             <div
               key={bot.bot_id}
               className="flex items-center justify-between rounded-xl border border-[var(--border)] px-5 py-4 transition-colors hover:border-[var(--border)]"
@@ -1909,7 +2055,7 @@ function SoulsTab({
               />
               {newName.trim() && (
                 <p className="mt-1 text-[11px] text-[var(--muted-foreground)]">
-                  ID:{" "}
+                  {t("ID")}:{" "}
                   {newName
                     .trim()
                     .toLowerCase()

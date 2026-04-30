@@ -6,6 +6,18 @@ DeepTutor is an **agent-native** intelligent learning companion built around
 a two-layer plugin model (Tools + Capabilities) with three entry points:
 CLI, WebSocket API, and Python SDK.
 
+## Product Update Log Rule
+
+When making any user-visible product change, update the public release notes by
+default. Do not wait for the user to ask.
+
+- Add the entry in `web/lib/release-notes.ts`.
+- Write it for regular users, not developers: focus on what changed, why it is
+  useful, and what the user can now do more easily.
+- Keep technical implementation details out of the main wording unless they
+  directly affect the user's experience.
+- The visible page is `/release-notes`, shown in the sidebar as `更新了啥`.
+
 ## Architecture
 
 ```

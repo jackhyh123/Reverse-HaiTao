@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { type ReactNode } from "react";
@@ -8,45 +7,56 @@ import { useAppShell } from "@/context/AppShellContext";
 import {
   BookOpen,
   Bot,
-  Brain,
-  Github,
+  ClipboardList,
   Library,
   MessageSquare,
+  MessageSquareText,
+  Network,
+  Newspaper,
   PanelLeftClose,
   PanelLeftOpen,
-  PenLine,
   Plus,
-  Settings,
+  Shield,
   type LucideIcon,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import SessionList from "@/components/SessionList";
-import { TutorBotRecent } from "@/components/sidebar/TutorBotRecent";
-import { BookRecent } from "@/components/sidebar/BookRecent";
-import { CoWriterRecent } from "@/components/sidebar/CoWriterRecent";
+import { BrandMark } from "@/components/branding/BrandMark";
+import SidebarSettingsMenu from "@/components/sidebar/SidebarSettingsMenu";
 import { VersionBadge } from "@/components/sidebar/VersionBadge";
+import { useAuth } from "@/context/AuthContext";
 import type { SessionSummary } from "@/lib/session-api";
 
 interface NavEntry {
   href: string;
   label: string;
   icon: LucideIcon;
+  /** true = 仅管理员可见。普通会员只看到 adminOnly:false 的条目 */
+  adminOnly?: boolean;
 }
 
 const PRIMARY_NAV: NavEntry[] = [
-  { href: "/chat", label: "Chat", icon: MessageSquare },
-  { href: "/agents", label: "TutorBot", icon: Bot },
-  { href: "/co-writer", label: "Co-Writer", icon: PenLine },
-  { href: "/book", label: "Book", icon: Library },
-  { href: "/knowledge", label: "Knowledge", icon: BookOpen },
-  { href: "/memory", label: "Memory", icon: Brain },
+  { href: "/learn", label: "nav.controlCenter", icon: Network },
+  { href: "/chat", label: "nav.guidanceChat", icon: MessageSquare, adminOnly: true },
+  {
+    href: "/agents/seller-launch-coach/chat",
+    label: "nav.sellerCoach",
+    icon: Bot,
+    adminOnly: true,
+  },
+  {
+    href: "/agents/platform-ops-coach/chat",
+    label: "nav.operatorCoach",
+    icon: Bot,
+    adminOnly: true,
+  },
+  { href: "/curriculum", label: "nav.curriculum", icon: ClipboardList, adminOnly: true },
+  // ↓ 普通会员可见的条目
+  { href: "/knowledge", label: "nav.knowledgeVault", icon: BookOpen },
+  { href: "/book", label: "nav.playbooks", icon: Library },
+  { href: "/feedback", label: "nav.feedback", icon: MessageSquareText },
+  { href: "/release-notes", label: "nav.releaseNotes", icon: Newspaper },
+  { href: "/admin", label: "nav.admin", icon: Shield, adminOnly: true },
 ];
-
-const SECONDARY_NAV: NavEntry[] = [
-  { href: "/settings", label: "Settings", icon: Settings },
-];
-const DEFAULT_SESSION_VIEWPORT_CLASS_NAME = "max-h-[112px]";
-const GITHUB_REPO_URL = "https://github.com/HKUDS/DeepTutor";
 
 interface SidebarShellProps {
   sessions?: SessionSummary[];
@@ -62,15 +72,7 @@ interface SidebarShellProps {
 }
 
 export function SidebarShell({
-  sessions = [],
-  activeSessionId = null,
-  loadingSessions = false,
-  showSessions = false,
-  sessionViewportClassName = DEFAULT_SESSION_VIEWPORT_CLASS_NAME,
   onNewChat,
-  onSelectSession,
-  onRenameSession,
-  onDeleteSession,
   footerSlot,
 }: SidebarShellProps) {
   const pathname = usePathname();
@@ -78,6 +80,16 @@ export function SidebarShell({
   const { t } = useTranslation();
   const { sidebarCollapsed: collapsed, setSidebarCollapsed: setCollapsed } =
     useAppShell();
+  const { user } = useAuth();
+  const isAdmin = !!user?.is_admin;
+
+  // 普通会员只看到非 adminOnly 的条目；管理员看全部
+  const visibleNav = PRIMARY_NAV.filter((entry) => isAdmin || !entry.adminOnly);
+  // 知识图谱学习就是默认首页。
+  const logoHref = "/learn";
+
+  const isActivePath = (href: string) =>
+    href === "/" ? pathname === "/" : pathname.startsWith(href);
 
   const handleNewChat = () => {
     if (onNewChat) {
@@ -94,17 +106,11 @@ export function SidebarShell({
         {/* Header: logo + collapse toggle (toggle replaces logo on hover) */}
         <div className="relative mb-2 flex h-9 w-9 items-center justify-center">
           <Link
-            href="/"
-            aria-label="DeepTutor"
+            href={logoHref}
+            aria-label={t("brand.shortName")}
             className="flex items-center justify-center transition-opacity duration-150 group-hover/sb:opacity-0"
           >
-            <Image
-              src="/logo-ver2.png"
-              alt="DeepTutor"
-              width={22}
-              height={22}
-              className="h-[22px] w-[22px] rounded-md"
-            />
+            <BrandMark size="sm" className="shadow-none" />
           </Link>
           <button
             onClick={() => setCollapsed(false)}
@@ -115,23 +121,25 @@ export function SidebarShell({
           </button>
         </div>
 
-        {/* New chat — visually distinct circular button */}
-        <button
-          onClick={handleNewChat}
-          title={t("New Chat") as string}
-          className="mb-2 flex h-9 w-9 items-center justify-center rounded-xl border border-[var(--border)]/50 bg-[var(--background)]/40 text-[var(--foreground)] shadow-sm transition-all duration-150 hover:border-[var(--border)] hover:bg-[var(--background)]/80"
-          aria-label={t("New Chat")}
-        >
-          <Plus size={16} strokeWidth={2.2} />
-        </button>
+        {/* New chat — only for admin */}
+        {isAdmin && (
+          <button
+            onClick={handleNewChat}
+            title={t("New Chat") as string}
+            className="mb-2 flex h-9 w-9 items-center justify-center rounded-xl border border-[var(--border)]/50 bg-[var(--background)]/40 text-[var(--foreground)] shadow-sm transition-all duration-150 hover:border-[var(--border)] hover:bg-[var(--background)]/80"
+            aria-label={t("New Chat")}
+          >
+            <Plus size={16} strokeWidth={2.2} />
+          </button>
+        )}
 
         {/* Subtle divider */}
-        <div className="my-1.5 h-px w-7 bg-[var(--border)]/40" />
+        {isAdmin && <div className="my-1.5 h-px w-7 bg-[var(--border)]/40" />}
 
         {/* Primary nav */}
         <nav className="flex w-full flex-col items-center gap-1 px-1.5">
-          {PRIMARY_NAV.map((item) => {
-            const active = pathname.startsWith(item.href);
+          {visibleNav.map((item) => {
+            const active = isActivePath(item.href);
             return (
               <Link
                 key={item.href}
@@ -154,40 +162,11 @@ export function SidebarShell({
 
         <div className="flex-1" />
 
-        {/* Secondary nav + footer */}
+        {/* Footer */}
         <div className="flex w-full flex-col items-center gap-1 px-1.5">
           <div className="my-1 h-px w-7 bg-[var(--border)]/40" />
-          {SECONDARY_NAV.map((item) => {
-            const active = pathname.startsWith(item.href);
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                title={t(item.label) as string}
-                className={`relative flex h-9 w-9 items-center justify-center rounded-xl transition-all duration-150 ${
-                  active
-                    ? "bg-[var(--background)]/80 text-[var(--foreground)] shadow-sm"
-                    : "text-[var(--muted-foreground)] hover:bg-[var(--background)]/50 hover:text-[var(--foreground)]"
-                }`}
-              >
-                {active && (
-                  <span className="absolute -left-1.5 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-full bg-[var(--foreground)]/80" />
-                )}
-                <item.icon size={18} strokeWidth={active ? 2 : 1.6} />
-              </Link>
-            );
-          })}
+          <SidebarSettingsMenu collapsed />
           {footerSlot}
-          <a
-            href={GITHUB_REPO_URL}
-            target="_blank"
-            rel="noreferrer noopener"
-            title="GitHub"
-            aria-label="GitHub"
-            className="mt-1 flex h-9 w-9 items-center justify-center rounded-xl text-[var(--muted-foreground)]/70 transition-colors hover:bg-[var(--background)]/50 hover:text-[var(--foreground)]"
-          >
-            <Github size={15} strokeWidth={1.6} />
-          </a>
           <VersionBadge collapsed />
         </div>
       </aside>
@@ -199,16 +178,10 @@ export function SidebarShell({
     <aside className="flex w-[220px] h-screen shrink-0 flex-col bg-[var(--secondary)] transition-all duration-200">
       {/* Header: logo + collapse toggle */}
       <div className="flex h-14 items-center justify-between px-4">
-        <Link href="/" className="group flex items-center gap-2">
-          <Image
-            src="/logo-ver2.png"
-            alt="DeepTutor"
-            width={22}
-            height={22}
-            className="h-[22px] w-[22px] transition-transform duration-200 group-hover:scale-105"
-          />
-          <span className="text-[16px] font-semibold leading-none tracking-[-0.02em] text-[var(--foreground)]">
-            DeepTutor
+        <Link href={logoHref} className="group flex items-center gap-2">
+          <BrandMark size="sm" className="transition-transform duration-200 group-hover:scale-105" />
+          <span className="max-w-[138px] truncate text-[16px] font-semibold leading-none tracking-[-0.02em] text-[var(--foreground)]">
+            {t("brand.shortName")}
           </span>
         </Link>
         <button
@@ -223,26 +196,19 @@ export function SidebarShell({
       {/* Primary nav */}
       <nav className="px-2 pt-1">
         <div className="space-y-px">
-          {/* New chat */}
-          <button
-            onClick={handleNewChat}
-            className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-[13.5px] text-[var(--muted-foreground)] transition-colors hover:bg-[var(--background)]/60 hover:text-[var(--foreground)]"
-          >
-            <Plus size={16} strokeWidth={2} />
-            <span>{t("New Chat")}</span>
-          </button>
+          {/* New chat — only for admin */}
+          {isAdmin && (
+            <button
+              onClick={handleNewChat}
+              className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-[13.5px] text-[var(--muted-foreground)] transition-colors hover:bg-[var(--background)]/60 hover:text-[var(--foreground)]"
+            >
+              <Plus size={16} strokeWidth={2} />
+              <span>{t("New Chat")}</span>
+            </button>
+          )}
 
-          {PRIMARY_NAV.map((item) => {
-            const active = pathname.startsWith(item.href);
-            const hasSessionsBelow =
-              item.href === "/chat" &&
-              showSessions &&
-              onSelectSession &&
-              onRenameSession &&
-              onDeleteSession;
-            const hasBots = item.href === "/agents";
-            const hasBooks = item.href === "/book";
-            const hasCoWriterDocs = item.href === "/co-writer";
+          {visibleNav.map((item) => {
+            const active = isActivePath(item.href);
             return (
               <div key={item.href}>
                 <Link
@@ -256,24 +222,6 @@ export function SidebarShell({
                   <item.icon size={16} strokeWidth={active ? 1.9 : 1.5} />
                   <span>{t(item.label)}</span>
                 </Link>
-                {hasSessionsBelow && (
-                  <div
-                    className={`${sessionViewportClassName} overflow-y-auto`}
-                  >
-                    <SessionList
-                      sessions={sessions}
-                      activeSessionId={activeSessionId}
-                      loading={loadingSessions}
-                      onSelect={onSelectSession}
-                      onRename={onRenameSession}
-                      onDelete={onDeleteSession}
-                      compact
-                    />
-                  </div>
-                )}
-                {hasBots && <TutorBotRecent />}
-                {hasCoWriterDocs && <CoWriterRecent />}
-                {hasBooks && <BookRecent />}
               </div>
             );
           })}
@@ -283,38 +231,12 @@ export function SidebarShell({
       {/* Spacer */}
       <div className="flex-1" />
 
-      {/* Secondary nav + footer */}
+      {/* Footer */}
       <div className="border-t border-[var(--border)]/40 px-2 py-2">
-        {SECONDARY_NAV.map((item) => {
-          const active = pathname.startsWith(item.href);
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={`flex items-center gap-2.5 rounded-lg px-3 py-2 text-[13.5px] transition-colors ${
-                active
-                  ? "bg-[var(--background)]/70 font-medium text-[var(--foreground)]"
-                  : "text-[var(--muted-foreground)] hover:bg-[var(--background)]/50 hover:text-[var(--foreground)]"
-              }`}
-            >
-              <item.icon size={16} strokeWidth={active ? 1.9 : 1.5} />
-              <span>{t(item.label)}</span>
-            </Link>
-          );
-        })}
+        <SidebarSettingsMenu />
         {footerSlot}
-        <div className="mt-0.5 flex items-center gap-0.5">
+        <div className="mt-0.5 flex items-center">
           <VersionBadge />
-          <a
-            href={GITHUB_REPO_URL}
-            target="_blank"
-            rel="noreferrer noopener"
-            title="GitHub"
-            aria-label="GitHub"
-            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-[var(--muted-foreground)]/55 transition-colors hover:bg-[var(--background)]/50 hover:text-[var(--muted-foreground)]"
-          >
-            <Github size={13} strokeWidth={1.7} />
-          </a>
         </div>
       </div>
     </aside>

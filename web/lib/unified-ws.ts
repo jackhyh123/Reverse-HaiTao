@@ -132,6 +132,7 @@ export class UnifiedWSClient {
   private reconnectAttempt = 0;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private intentionalClose = false;
+  private lastErrorAt = 0;
 
   private activeTurnId: string | null = null;
   private lastSeq = 0;
@@ -189,13 +190,33 @@ export class UnifiedWSClient {
     };
 
     this.ws.onerror = (err) => {
-      console.error("WS error:", err);
+      const now = Date.now();
+      if (now - this.lastErrorAt < 3_000) return;
+      this.lastErrorAt = now;
+
+      const state =
+        this.ws?.readyState === WebSocket.CONNECTING
+          ? "connecting"
+          : this.ws?.readyState === WebSocket.OPEN
+            ? "open"
+            : this.ws?.readyState === WebSocket.CLOSING
+              ? "closing"
+              : "closed";
+
+      console.warn("WS transport issue, waiting for reconnect.", {
+        state,
+        hasActiveTurn: Boolean(this.activeTurnId),
+        errorType:
+          err && typeof err === "object" && "type" in err
+            ? String((err as { type?: unknown }).type ?? "unknown")
+            : "unknown",
+      });
     };
   }
 
   send(msg: ChatMessage): void {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
-      console.error("WebSocket not connected");
+      console.warn("WebSocket not connected yet");
       return;
     }
     this.ws.send(JSON.stringify(msg));

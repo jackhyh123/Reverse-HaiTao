@@ -64,6 +64,43 @@ def _terminate(process: subprocess.Popen[str] | None, name: str) -> None:
         process.kill()
 
 
+def _free_port(port: int) -> None:
+    """Terminate stale local processes that keep the dev ports busy."""
+
+    try:
+        result = subprocess.run(
+            ["lsof", "-ti", f"tcp:{port}"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+            check=False,
+        )
+    except FileNotFoundError:
+        return
+
+    pids = [int(pid) for pid in result.stdout.split() if pid.strip().isdigit()]
+    if not pids:
+        return
+
+    log_info(f"Port {port} is busy; stopping stale process(es) ...")
+    for pid in pids:
+        try:
+            os.kill(pid, signal.SIGTERM)
+        except ProcessLookupError:
+            pass
+    time.sleep(0.8)
+
+    for pid in pids:
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            continue
+        try:
+            os.kill(pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+
+
 def _spawn(
     command: list[str],
     *,
@@ -90,6 +127,43 @@ def _spawn(
     return process
 
 
+def _find_backend_python() -> str:
+    """Prefer a Python runtime that can actually run the FastAPI backend."""
+
+    candidates = [
+        os.environ.get("DEEPTUTOR_PYTHON", ""),
+        sys.executable,
+        str(PROJECT_ROOT / ".venv" / "bin" / "python"),
+        str(PROJECT_ROOT / "venv" / "bin" / "python"),
+        str(Path.home() / "miniconda3" / "bin" / "python"),
+        str(Path.home() / "anaconda3" / "bin" / "python"),
+        shutil.which("python3") or "",
+        shutil.which("python") or "",
+    ]
+
+    seen: set[str] = set()
+    for candidate in candidates:
+        if not candidate or candidate in seen:
+            continue
+        seen.add(candidate)
+        path = Path(candidate)
+        if not path.exists():
+            continue
+        probe = subprocess.run(
+            [candidate, "-c", "import uvicorn, fastapi"],
+            cwd=str(PROJECT_ROOT),
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            text=True,
+        )
+        if probe.returncode == 0:
+            return candidate
+
+    log_error("No Python runtime with uvicorn and fastapi was found.")
+    log_info("Install backend dependencies or set DEEPTUTOR_PYTHON to the right Python path.")
+    raise SystemExit(1)
+
+
 # ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
@@ -114,7 +188,14 @@ def main() -> None:
         ],
     )
 
-    api_base = f"http://localhost:{backend_port}"
+    api_base = (
+        os.environ.get("NEXT_PUBLIC_API_BASE_EXTERNAL")
+        or os.environ.get("NEXT_PUBLIC_API_BASE")
+        or f"http://localhost:{backend_port}"
+    )
+
+    _free_port(backend_port)
+    _free_port(frontend_port)
 
     # Write web/.env.local so the frontend picks up the correct backend port
     # even when started independently (e.g. `npm run dev` without this launcher).
@@ -130,7 +211,13 @@ def main() -> None:
     frontend_env = os.environ.copy()
     frontend_env["NEXT_PUBLIC_API_BASE"] = api_base
 
-    backend_cmd = [sys.executable, "-m", "deeptutor.api.run_server"]
+    # Next dev cache can occasionally keep a stale Turbopack process in a
+    # half-ready state after forced restarts. Clearing only the dev cache keeps
+    # the launcher friendly for non-technical use without touching dependencies.
+    shutil.rmtree(PROJECT_ROOT / "web" / ".next" / "dev", ignore_errors=True)
+
+    backend_python = _find_backend_python()
+    backend_cmd = [backend_python, "-m", "deeptutor.api.run_server"]
     frontend_cmd = [npm, "run", "dev", "--", "--port", str(frontend_port)]
 
     log_info("Starting backend ...")

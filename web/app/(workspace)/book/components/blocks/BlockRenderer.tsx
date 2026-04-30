@@ -10,6 +10,7 @@ import {
   ArrowDown,
   Replace,
 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import type { Block, BlockType } from "@/lib/book-types";
 import MarkdownRenderer from "@/components/common/MarkdownRenderer";
 
@@ -72,13 +73,20 @@ export default function BlockRenderer({
   currentPageId,
   bookLanguage,
 }: BlockRendererProps) {
+  const { t } = useTranslation();
   const [showTypeMenu, setShowTypeMenu] = useState(false);
 
   if (block.status === "pending" || block.status === "generating") {
     return (
       <div className="flex items-center gap-2 rounded-2xl border border-dashed border-[var(--border)] bg-[var(--card)] px-4 py-3 text-sm text-[var(--muted-foreground)]">
         <Loader2 className="h-4 w-4 animate-spin" />
-        <span>Generating {block.type}…</span>
+        <span>
+          {t("book.block.generating", {
+            type: t(`book.block.type.${block.type}`, {
+              defaultValue: block.type,
+            }),
+          })}
+        </span>
       </div>
     );
   }
@@ -87,17 +95,21 @@ export default function BlockRenderer({
       <div className="rounded-2xl border border-rose-300/60 bg-rose-50 px-4 py-3 text-sm text-rose-900 dark:border-rose-500/40 dark:bg-rose-500/10 dark:text-rose-100">
         <div className="mb-1 flex items-center gap-2 font-medium">
           <AlertTriangle className="h-4 w-4" />
-          {block.type} block failed
+          {t("book.block.failed", {
+            type: t(`book.block.type.${block.type}`, {
+              defaultValue: block.type,
+            }),
+          })}
         </div>
         <div className="text-xs opacity-80">
-          {block.error || "Unknown error"}
+          {block.error || t("book.block.unknownError")}
         </div>
         {onRegenerate && (
           <button
             onClick={() => onRegenerate(block)}
             className="mt-2 inline-flex rounded-md border border-rose-400/60 bg-white/40 px-2 py-1 text-xs font-medium hover:bg-white/60 dark:bg-white/10"
           >
-            Retry
+            {t("Retry")}
           </button>
         )}
       </div>
@@ -183,14 +195,14 @@ export default function BlockRenderer({
               <button
                 onClick={() => onMove(block, "up")}
                 className="pointer-events-auto rounded p-1 hover:bg-[var(--background)] hover:text-[var(--foreground)]"
-                title="Move up"
+                title={t("book.block.moveUp")}
               >
                 <ArrowUp className="h-3.5 w-3.5" />
               </button>
               <button
                 onClick={() => onMove(block, "down")}
                 className="pointer-events-auto rounded p-1 hover:bg-[var(--background)] hover:text-[var(--foreground)]"
-                title="Move down"
+                title={t("book.block.moveDown")}
               >
                 <ArrowDown className="h-3.5 w-3.5" />
               </button>
@@ -201,22 +213,24 @@ export default function BlockRenderer({
               <button
                 onClick={() => setShowTypeMenu((v) => !v)}
                 className="rounded p-1 hover:bg-[var(--background)] hover:text-[var(--foreground)]"
-                title="Change type"
+                title={t("book.block.changeType")}
               >
                 <Replace className="h-3.5 w-3.5" />
               </button>
               {showTypeMenu && (
                 <div className="absolute right-0 top-full mt-1 max-h-60 w-44 overflow-y-auto rounded-md border border-[var(--border)] bg-[var(--card)] p-1 shadow-lg">
-                  {CHANGEABLE_TYPES.filter((t) => t !== block.type).map((t) => (
+                  {CHANGEABLE_TYPES.filter((blockType) => blockType !== block.type).map((blockType) => (
                     <button
-                      key={t}
+                      key={blockType}
                       onClick={() => {
                         setShowTypeMenu(false);
-                        onChangeType(block, t);
+                        onChangeType(block, blockType);
                       }}
                       className="block w-full rounded px-2 py-1 text-left text-xs hover:bg-[var(--background)] hover:text-[var(--foreground)]"
                     >
-                      {t}
+                      {t(`book.block.type.${blockType}`, {
+                        defaultValue: blockType,
+                      })}
                     </button>
                   ))}
                 </div>
@@ -227,7 +241,7 @@ export default function BlockRenderer({
             <button
               onClick={() => onRegenerate(block)}
               className="pointer-events-auto rounded p-1 hover:bg-[var(--background)] hover:text-[var(--foreground)]"
-              title="Regenerate"
+              title={t("book.block.regenerate")}
             >
               <RefreshCw className="h-3.5 w-3.5" />
             </button>
@@ -236,7 +250,7 @@ export default function BlockRenderer({
             <button
               onClick={() => onDelete(block)}
               className="pointer-events-auto rounded p-1 hover:bg-rose-100 hover:text-rose-700 dark:hover:bg-rose-500/10 dark:hover:text-rose-200"
-              title="Delete"
+              title={t("Delete")}
             >
               <Trash2 className="h-3.5 w-3.5" />
             </button>

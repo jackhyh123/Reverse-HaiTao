@@ -49,18 +49,13 @@ export function AppShellProvider({ children }: { children: React.ReactNode }) {
   const [theme, setThemeState] = useState<Theme>(() => {
     return getStoredTheme() ?? getSystemTheme();
   });
-  // Always start with "en" to match SSR; hydrate from localStorage after mount
-  const [language, setLanguageState] = useState<AppLanguage>("en");
+  const [language, setLanguageState] = useState<AppLanguage>(() =>
+    readStoredLanguage(),
+  );
   const [activeSessionId, setActiveSessionIdState] = useState<string | null>(
     () => readStoredActiveSessionId(),
   );
-  // Always start expanded to match SSR; hydrate from localStorage after mount
-  const [sidebarCollapsed, setSidebarCollapsedState] = useState<boolean>(false);
-
-  useEffect(() => {
-    setLanguageState(readStoredLanguage());
-    setSidebarCollapsedState(readStoredSidebarCollapsed());
-  }, []);
+  const [sidebarCollapsed, setSidebarCollapsedState] = useState(false);
 
   useEffect(() => {
     return subscribeToThemeChanges((nextTheme) => {
@@ -70,6 +65,10 @@ export function AppShellProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
+
+    queueMicrotask(() => {
+      setSidebarCollapsedState(readStoredSidebarCollapsed());
+    });
 
     const onStorage = (event: StorageEvent) => {
       if (event.key === LANGUAGE_STORAGE_KEY) {
