@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
-import { Check, X } from "lucide-react";
+import { useCallback, useMemo, useState, useEffect } from "react";
+import { Check, ChevronLeft, ChevronRight, X } from "lucide-react";
 import FloatingAITutor from "@/components/learn/FloatingAITutor";
 import {
   DEFAULT_EXPLORE_GRAPH,
@@ -11,35 +11,83 @@ import {
 type LocaleKey = "zh" | "en";
 
 // ═══════════════════════════════════════════════════════════════
-// Data: Journey Stages & Roles
+// Data: Journey Stages
 // ═══════════════════════════════════════════════════════════════
 
-const JOURNEY_STAGES = [
-  { id: "discovery", label: { zh: "发现", en: "Discovery" }, desc: { zh: "用户在哪看到产品", en: "Where buyers discover" }, color: "#f59e0b" },
-  { id: "verification", label: { zh: "验证", en: "Verification" }, desc: { zh: "判断靠不靠谱", en: "Verify trust" }, color: "#f97316" },
-  { id: "decision", label: { zh: "决策", en: "Decision" }, desc: { zh: "下决心购买", en: "Make decision" }, color: "#ef4444" },
-  { id: "purchase", label: { zh: "购买", en: "Purchase" }, desc: { zh: "下单付款", en: "Place order" }, color: "#3b82f6" },
-  { id: "delivery", label: { zh: "收货", en: "Delivery" }, desc: { zh: "商品到手", en: "Receive goods" }, color: "#10b981" },
-  { id: "sharing", label: { zh: "分享", en: "Sharing" }, desc: { zh: "晒单口碑回流", en: "Share & review" }, color: "#8b5cf6" },
-];
-
-interface RoleDef {
+interface StageDef {
   id: string;
   label: { zh: string; en: string };
+  number: number;
+  buyerAction: { zh: string; en: string };
+  desc: { zh: string; en: string };
   color: string;
-  subtypes: string;
-  /** Which journey stages this role participates in (in order) */
-  activeStages: string[];
+  /** Which roles participate at this stage */
+  activeRoles: string[];
 }
 
-const ROLES: RoleDef[] = [
-  { id: "buyer", label: { zh: "用户/买家", en: "Buyer" }, color: "#10b981", subtypes: "搜索型 · 冲动型 · 社区型 · 批发型", activeStages: ["discovery", "verification", "decision", "purchase", "delivery", "sharing"] },
-  { id: "kol", label: { zh: "KOL/社区版主", en: "KOL/Moderator" }, color: "#ec4899", subtypes: "大KOL · 小KOL · Reddit版主 · Discord主", activeStages: ["discovery", "verification", "decision", "sharing"] },
-  { id: "platform", label: { zh: "反淘平台", en: "Platform" }, color: "#3b82f6", subtypes: "代理型 · 工具型 · 自营/半自营", activeStages: ["discovery", "purchase", "delivery"] },
-  { id: "seller", label: { zh: "卖家", en: "Seller" }, color: "#f59e0b", subtypes: "签约卖家 · 独立卖家 · 纯国内卖家", activeStages: ["purchase", "delivery"] },
+const JOURNEY_STAGES: StageDef[] = [
+  {
+    id: "discovery", number: 1,
+    label: { zh: "发现", en: "Discovery" },
+    buyerAction: { zh: "刷到种草内容，被勾起兴趣", en: "Stumbles upon engaging content" },
+    desc: { zh: "买家在TikTok/YouTube/小红书刷到达人或平台推送的内容，第一次接触到产品", en: "Buyer first discovers the product via KOL content or platform algorithm" },
+    color: "#f59e0b",
+    activeRoles: ["kol", "platform"],
+  },
+  {
+    id: "verification", number: 2,
+    label: { zh: "验证", en: "Verification" },
+    buyerAction: { zh: "上Reddit搜索评价，看QC实拍图", en: "Searches Reddit for reviews and QC photos" },
+    desc: { zh: "买家不信任广告，转向Reddit社区和Yupoo相册验证产品质量和卖家信誉", en: "Buyer distrusts ads and turns to Reddit communities and Yupoo galleries" },
+    color: "#f97316",
+    activeRoles: ["kol", "seller", "platform"],
+  },
+  {
+    id: "decision", number: 3,
+    label: { zh: "决策", en: "Decision" },
+    buyerAction: { zh: "进Discord群讨论，问尺码和细节", en: "Joins Discord to ask about sizing and details" },
+    desc: { zh: "买家进入私域社区深度交流，KOL和资深买家给出建议，最终下定决心", en: "Buyer enters private communities for deep discussion before committing" },
+    color: "#ef4444",
+    activeRoles: ["kol"],
+  },
+  {
+    id: "purchase", number: 4,
+    label: { zh: "购买", en: "Purchase" },
+    buyerAction: { zh: "在代理平台下单付款", en: "Places order on agent platform" },
+    desc: { zh: "买家通过Pandabuy/Superbuy等代理平台下单，平台接入国内电商API完成采购", en: "Buyer orders through agent platforms connected to domestic e-commerce APIs" },
+    color: "#3b82f6",
+    activeRoles: ["platform", "seller", "kol"],
+  },
+  {
+    id: "delivery", number: 5,
+    label: { zh: "收货", en: "Delivery" },
+    buyerAction: { zh: "等待仓库质检→集运→国际快递→到手", en: "Awaits QC → consolidation → international shipping" },
+    desc: { zh: "仓库收货验货后合包集运发往海外，清关后派送到买家手中", en: "Warehouse QC, consolidation, international shipping, customs clearance, final delivery" },
+    color: "#10b981",
+    activeRoles: ["platform", "seller"],
+  },
+  {
+    id: "sharing", number: 6,
+    label: { zh: "分享", en: "Sharing" },
+    buyerAction: { zh: "在Reddit发帖晒单，形成口碑回流", en: "Posts review on Reddit, creating word-of-mouth" },
+    desc: { zh: "买家晒出开箱照和评价，回流到发现阶段的Reddit社区，完成流量闭环", en: "Buyer shares unboxing and review, feeding back into Reddit discovery — closing the traffic loop" },
+    color: "#8b5cf6",
+    activeRoles: ["kol"],
+  },
 ];
 
-// Node → stages & roles mapping
+// ═══════════════════════════════════════════════════════════════
+// Role definitions
+// ═══════════════════════════════════════════════════════════════
+
+const ROLE_META: Record<string, { label: { zh: string; en: string }; color: string; icon: string }> = {
+  buyer:  { label: { zh: "买家", en: "Buyer" }, color: "#10b981", icon: "🧑‍💻" },
+  kol:    { label: { zh: "KOL/社区", en: "KOL/Community" }, color: "#ec4899", icon: "📢" },
+  platform: { label: { zh: "平台", en: "Platform" }, color: "#3b82f6", icon: "🏪" },
+  seller: { label: { zh: "卖家", en: "Seller" }, color: "#f59e0b", icon: "📦" },
+};
+
+// Node → stages & roles
 const NODE_PLACEMENT: Record<string, { stages: string[]; roles: string[] }> = {
   kol_general:            { stages: ["discovery", "decision", "sharing"],  roles: ["kol"] },
   private_community:       { stages: ["verification", "decision"],          roles: ["kol"] },
@@ -57,35 +105,6 @@ const NODE_PLACEMENT: Record<string, { stages: string[]; roles: string[] }> = {
   supply_chain_upstream:   { stages: ["purchase"],                          roles: ["seller"] },
   currency_tax:            { stages: ["purchase", "delivery"],              roles: ["platform"] },
 };
-
-// ═══════════════════════════════════════════════════════════════
-// Subway map layout constants
-// ═══════════════════════════════════════════════════════════════
-
-const SVG_W = 1100;
-const SVG_H = 600;
-
-// Station X positions (centers of station circles)
-const STATION_X: Record<string, number> = {
-  discovery:    120,
-  verification: 290,
-  decision:     460,
-  purchase:     630,
-  delivery:     800,
-  sharing:      970,
-};
-
-// Role track Y positions (line centers)
-const TRACK_Y: Record<string, number> = {
-  buyer:    140,
-  kol:      290,
-  platform: 430,
-  seller:   530,
-};
-
-const STATION_R = 14;  // big station circle radius
-const LINE_W = 5;      // line stroke width
-const BUYER_LINE_W = 7;
 
 // ═══════════════════════════════════════════════════════════════
 // Types
@@ -115,10 +134,10 @@ const EXPLORE_QUICK_QUESTIONS = [
 ];
 
 // ═══════════════════════════════════════════════════════════════
-// Helper: get nodes for a stage+role cell
+// Helper: get nodes for a stage+role
 // ═══════════════════════════════════════════════════════════════
 
-function getNodesForStation(
+function getNodesForStageRole(
   nodes: ExploreNodeType[],
   stageId: string,
   roleId: string,
@@ -130,31 +149,75 @@ function getNodesForStation(
   });
 }
 
+function getNodesForStage(
+  nodes: ExploreNodeType[],
+  stageId: string,
+): ExploreNodeType[] {
+  return nodes.filter((n) => {
+    const p = NODE_PLACEMENT[n.id];
+    if (!p) return false;
+    return p.stages.includes(stageId);
+  });
+}
+
 // ═══════════════════════════════════════════════════════════════
-// Subway line path generator
+// Minimap component (small version of the full matrix)
 // ═══════════════════════════════════════════════════════════════
 
-function buildLinePath(role: RoleDef): string {
-  const { activeStages } = role;
-  if (activeStages.length === 0) return "";
-  if (activeStages.length === 1) {
-    const x = STATION_X[activeStages[0]];
-    const y = TRACK_Y[role.id];
-    return `M ${x - 20} ${y} L ${x + 20} ${y}`;
-  }
-
-  const y = TRACK_Y[role.id];
-  const points = activeStages.map((sid) => ({ x: STATION_X[sid], y }));
-
-  // Smooth path through all active stations using cubic beziers
-  let d = `M ${points[0].x} ${y}`;
-  for (let i = 1; i < points.length; i++) {
-    const prev = points[i - 1];
-    const curr = points[i];
-    const cpx = (prev.x + curr.x) / 2;
-    d += ` C ${cpx} ${y}, ${cpx} ${y}, ${curr.x} ${y}`;
-  }
-  return d;
+function Minimap({ currentStage, onNavigate, nodes: graphNodes }: {
+  currentStage: string;
+  onNavigate: (stageId: string) => void;
+  nodes: ExploreNodeType[];
+}) {
+  return (
+    <div className="rounded-xl border border-slate-200/60 bg-white/90 p-3 shadow-sm backdrop-blur dark:border-slate-700/60 dark:bg-slate-900/90">
+      <div className="mb-2 text-[10px] font-bold uppercase text-slate-400 dark:text-slate-500">
+        全景导航
+      </div>
+      <div className="grid grid-cols-[auto_repeat(6,1fr)] gap-0.5">
+        {/* Role row headers + cells (compact) */}
+        {Object.entries(ROLE_META)
+          .filter(([id]) => id !== "buyer")
+          .map(([roleId, meta]) => (
+            <div key={roleId} className="contents">
+              <div
+                className="flex items-center px-1 py-0.5 text-[9px] font-semibold"
+                style={{ color: meta.color }}
+              >
+                {meta.label.zh}
+              </div>
+              {JOURNEY_STAGES.map((stage) => {
+                const hasNodes = getNodesForStageRole(graphNodes, stage.id, roleId).length > 0;
+                const isCurrent = stage.id === currentStage;
+                return (
+                  <button
+                    key={`${roleId}-${stage.id}`}
+                    onClick={() => onNavigate(stage.id)}
+                    className={`rounded-sm transition-all ${
+                      hasNodes
+                        ? isCurrent
+                          ? "ring-2 ring-offset-1"
+                          : "hover:opacity-80"
+                        : ""
+                    }`}
+                    style={{
+                      backgroundColor: hasNodes
+                        ? isCurrent
+                          ? meta.color
+                          : `${meta.color}40`
+                        : "transparent",
+                      ...(isCurrent ? { ringColor: meta.color } : {}),
+                      minHeight: 14,
+                    }}
+                    title={hasNodes ? `${meta.label.zh} · ${stage.label.zh}` : undefined}
+                  />
+                );
+              })}
+            </div>
+          ))}
+      </div>
+    </div>
+  );
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -165,11 +228,10 @@ export default function ExplorePage() {
   const locale: LocaleKey = "zh";
   const { domains, nodes: graphNodes } = DEFAULT_EXPLORE_GRAPH;
 
-  const [hoveredRole, setHoveredRole] = useState<string | null>(null);
-  const [hoveredStage, setHoveredStage] = useState<string | null>(null);
-  const [selectedRoleStage, setSelectedRoleStage] = useState<{ role: string; stage: string } | null>(null);
+  const [currentStageIdx, setCurrentStageIdx] = useState(0);
   const [aiFocusState, setAiFocusState] = useState<AiFocusState | null>(null);
 
+  const currentStage = JOURNEY_STAGES[currentStageIdx];
   const inAiFocus = aiFocusState !== null;
 
   const aiHighlightedSet = useMemo(
@@ -189,18 +251,47 @@ export default function ExplorePage() {
     [domains, graphNodes],
   );
 
-  // Which nodes are dimmed in AI focus
-  const isDimmed = useCallback(
-    (nodeId: string) => inAiFocus && !aiHighlightedSet.has(nodeId),
-    [inAiFocus, aiHighlightedSet],
+  // Current stage nodes grouped by role
+  const currentStageNodes = useMemo(
+    () => getNodesForStage(graphNodes, currentStage.id),
+    [graphNodes, currentStage],
   );
+
+  const nodesByRole = useMemo(() => {
+    const grouped: Record<string, ExploreNodeType[]> = {};
+    for (const roleId of [...currentStage.activeRoles, "buyer"]) {
+      grouped[roleId] = getNodesForStageRole(graphNodes, currentStage.id, roleId);
+    }
+    return grouped;
+  }, [graphNodes, currentStage, currentStage.activeRoles]);
+
+  // Navigation
+  const goToStage = useCallback(
+    (idx: number) => {
+      const clamped = Math.max(0, Math.min(JOURNEY_STAGES.length - 1, idx));
+      setCurrentStageIdx(clamped);
+    },
+    [],
+  );
+
+  const goNext = useCallback(() => goToStage(currentStageIdx + 1), [currentStageIdx, goToStage]);
+  const goPrev = useCallback(() => goToStage(currentStageIdx - 1), [currentStageIdx, goToStage]);
+
+  // Keyboard navigation
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "ArrowRight") goNext();
+      else if (e.key === "ArrowLeft") goPrev();
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [goNext, goPrev]);
 
   // AI response
   const handleAIResponse = useCallback((data: Record<string, unknown>) => {
     const highlightedNodes = data.highlighted_nodes as string[] | undefined;
     const actionSteps = data.action_steps as ActionStep[] | undefined;
     if (highlightedNodes && highlightedNodes.length > 0) {
-      setSelectedRoleStage(null);
       setAiFocusState({
         highlightedNodes,
         actionSteps: actionSteps || [],
@@ -210,7 +301,6 @@ export default function ExplorePage() {
   }, []);
 
   const exitAiFocus = useCallback(() => setAiFocusState(null), []);
-  const clearAll = useCallback(() => { setSelectedRoleStage(null); exitAiFocus(); }, [exitAiFocus]);
 
   const toggleStepComplete = useCallback((index: number) => {
     setAiFocusState((prev) => {
@@ -231,17 +321,10 @@ export default function ExplorePage() {
     return `已为你聚焦"${names}"相关路径`;
   }, [aiFocusState, graphNodes, locale]);
 
-  // Determine if a role line should be dimmed
-  const isRoleDimmed = useCallback(
-    (roleId: string) => {
-      if (!inAiFocus) return false;
-      // A role is dimmed if NONE of its nodes are highlighted AND the role is not the buyer
-      const hasHighlight = graphNodes.some(
-        (n) => NODE_PLACEMENT[n.id]?.roles.includes(roleId) && aiHighlightedSet.has(n.id),
-      );
-      return !hasHighlight;
-    },
-    [inAiFocus, aiHighlightedSet, graphNodes],
+  // Determine if a node is AI-highlighted
+  const isAiHighlighted = useCallback(
+    (nodeId: string) => aiHighlightedSet.has(nodeId),
+    [aiHighlightedSet],
   );
 
   // ═════════════════════════════════════════════════════════════
@@ -258,13 +341,13 @@ export default function ExplorePage() {
               反淘生态探索
             </h1>
             <span className="hidden text-[11px] text-slate-500 md:inline dark:text-slate-400">
-              角色地铁图 · 每条线 = 一个角色 · 大站 = 协作交汇点
+              场景演替 · 逐阶段深入买家旅程
             </span>
           </div>
           <div className="flex items-center gap-2">
-            {(selectedRoleStage || inAiFocus) && (
+            {inAiFocus && (
               <button
-                onClick={clearAll}
+                onClick={exitAiFocus}
                 className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400 dark:hover:bg-slate-800"
               >
                 查看全景
@@ -293,309 +376,232 @@ export default function ExplorePage() {
                 查看全景
               </button>
             </div>
-            <button onClick={exitAiFocus} className="rounded-lg p-1 text-amber-500 transition-colors hover:bg-amber-100 dark:hover:bg-amber-900/50">
+            <button
+              onClick={exitAiFocus}
+              className="rounded-lg p-1 text-amber-500 transition-colors hover:bg-amber-100 dark:hover:bg-amber-900/50"
+            >
               <X className="h-4 w-4" />
             </button>
           </div>
         </div>
       )}
 
-      {/* Main: SVG subway map + action panel */}
+      {/* Main: stage scene + action panel */}
       <div className="relative min-h-0 flex-1 overflow-hidden">
         <div
-          className="h-full overflow-auto"
+          className="flex h-full flex-col overflow-auto"
           style={inAiFocus ? { marginRight: 340 } : undefined}
         >
-          {/* ── Legend ── */}
-          <div className="flex items-center justify-center gap-6 px-4 py-3">
-            {ROLES.map((role) => {
-              const dimmed = isRoleDimmed(role.id);
-              return (
-                <button
-                  key={role.id}
-                  onClick={() => {
-                    if (selectedRoleStage?.role === role.id && !selectedRoleStage?.stage) {
-                      setSelectedRoleStage(null);
-                    } else {
-                      setSelectedRoleStage({ role: role.id, stage: "" });
-                      exitAiFocus();
-                    }
-                  }}
-                  onMouseEnter={() => setHoveredRole(role.id)}
-                  onMouseLeave={() => setHoveredRole(null)}
-                  className={`flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-bold transition-all ${
-                    dimmed ? "opacity-20" : "opacity-100"
-                  } ${
-                    selectedRoleStage?.role === role.id
-                      ? "bg-slate-200 dark:bg-slate-700"
-                      : "hover:bg-slate-100 dark:hover:bg-slate-800"
-                  }`}
-                  style={{
-                    color: dimmed ? "#94a3b8" : role.color,
-                  }}
-                >
+          {/* ── Stage title bar ── */}
+          <div className="shrink-0 border-b border-slate-200/60 bg-white/60 px-4 py-4 text-center backdrop-blur dark:border-slate-800/60 dark:bg-slate-900/60">
+            <div className="flex items-center justify-center gap-4">
+              <button
+                onClick={goPrev}
+                disabled={currentStageIdx === 0}
+                className="rounded-full border border-slate-200 p-2 text-slate-400 transition-all hover:border-slate-300 hover:text-slate-600 disabled:opacity-20 dark:border-slate-700 dark:hover:border-slate-600 dark:hover:text-slate-300"
+              >
+                <ChevronLeft className="h-5 w-5" />
+              </button>
+
+              <div className="min-w-0">
+                <div className="flex items-center justify-center gap-2">
                   <span
-                    className="inline-block h-3 w-3 rounded-full"
-                    style={{ backgroundColor: dimmed ? "#94a3b8" : role.color }}
-                  />
-                  {role.label[locale]}
-                </button>
-              );
-            })}
+                    className="rounded-full px-2.5 py-0.5 text-[11px] font-bold text-white"
+                    style={{ backgroundColor: currentStage.color }}
+                  >
+                    {currentStage.number}/6
+                  </span>
+                  <h2
+                    className="text-xl font-black tracking-tight"
+                    style={{ color: currentStage.color }}
+                  >
+                    {currentStage.label[locale]}
+                  </h2>
+                </div>
+                <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                  {currentStage.desc[locale]}
+                </div>
+              </div>
+
+              <button
+                onClick={goNext}
+                disabled={currentStageIdx === JOURNEY_STAGES.length - 1}
+                className="rounded-full border border-slate-200 p-2 text-slate-400 transition-all hover:border-slate-300 hover:text-slate-600 disabled:opacity-20 dark:border-slate-700 dark:hover:border-slate-600 dark:hover:text-slate-300"
+              >
+                <ChevronRight className="h-5 w-5" />
+              </button>
+            </div>
           </div>
 
-          {/* ── SVG Subway Map ── */}
-          <div className="relative mx-auto" style={{ maxWidth: SVG_W + 80 }}>
-            <svg
-              viewBox={`0 0 ${SVG_W} ${SVG_H}`}
-              className="h-auto w-full"
-              style={{ minWidth: 800 }}
-            >
-              {/* Background grid lines (stage verticals) */}
-              {JOURNEY_STAGES.map((stage) => {
-                const x = STATION_X[stage.id];
-                const isActive = hoveredStage === stage.id || selectedRoleStage?.stage === stage.id;
-                return (
-                  <g key={`vgrid-${stage.id}`}>
-                    <line
-                      x1={x} y1={30} x2={x} y2={SVG_H - 10}
-                      stroke={isActive ? "#cbd5e1" : "#e2e8f0"}
-                      strokeWidth={isActive ? 1.5 : 0.5}
-                      strokeDasharray="5 5"
-                      className="dark:stroke-slate-700"
-                    />
-                  </g>
-                );
-              })}
-
-              {/* Role subway lines */}
-              {ROLES.map((role) => {
-                const dimmed = isRoleDimmed(role.id);
-                const isHovered = hoveredRole === role.id;
-                const isSelected = selectedRoleStage?.role === role.id;
-                const isBuyer = role.id === "buyer";
-                const strokeW = isBuyer ? BUYER_LINE_W : LINE_W;
-
-                return (
-                  <g key={`line-${role.id}`}>
-                    {/* The line path */}
-                    <path
-                      d={buildLinePath(role)}
-                      fill="none"
-                      stroke={dimmed ? "#cbd5e1" : role.color}
-                      strokeWidth={strokeW + (isHovered || isSelected ? 2 : 0)}
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      opacity={
-                        dimmed
-                          ? 0.12
-                          : hoveredRole && hoveredRole !== role.id
-                            ? 0.25
-                            : isSelected
-                              ? 1
-                              : 0.75
-                      }
-                      className="transition-all duration-300"
-                    />
-
-                    {/* Station circles */}
-                    {role.activeStages.map((stageId) => {
-                      const x = STATION_X[stageId];
-                      const y = TRACK_Y[role.id];
-                      const stageHovered = hoveredStage === stageId;
-                      const stageSelected = selectedRoleStage?.stage === stageId;
-                      const isActiveStation = stageHovered || stageSelected;
-                      const r = isActiveStation ? STATION_R + 3 : STATION_R;
-
+          {/* ── Scene: role cards around buyer ── */}
+          <div className="min-h-0 flex-1 overflow-auto p-6">
+            <div className="mx-auto flex max-w-2xl flex-col items-center gap-6">
+              {/* Buyer card (center, always present) */}
+              <div className="w-full max-w-sm">
+                <div
+                  className="relative rounded-2xl border-2 bg-white p-5 shadow-lg dark:bg-slate-900"
+                  style={{ borderColor: "#10b981" }}
+                >
+                  <div className="absolute -top-3 left-4 rounded-full bg-emerald-500 px-3 py-0.5 text-[10px] font-bold text-white">
+                    {ROLE_META.buyer.icon} 买家此刻
+                  </div>
+                  <div className="mt-1 text-[15px] font-bold text-slate-900 dark:text-slate-100">
+                    {currentStage.buyerAction[locale]}
+                  </div>
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {currentStage.activeRoles.map((roleId) => {
+                      const meta = ROLE_META[roleId];
                       return (
-                        <g
-                          key={`station-${role.id}-${stageId}`}
-                          className="cursor-pointer"
-                          onMouseEnter={() => setHoveredStage(stageId)}
-                          onMouseLeave={() => setHoveredStage(null)}
-                          onClick={() => {
-                            exitAiFocus();
-                            if (selectedRoleStage?.role === role.id && selectedRoleStage?.stage === stageId) {
-                              setSelectedRoleStage(null);
-                            } else {
-                              setSelectedRoleStage({ role: role.id, stage: stageId });
-                            }
+                        <span
+                          key={roleId}
+                          className="rounded-full px-2 py-0.5 text-[10px] font-medium"
+                          style={{
+                            backgroundColor: `${meta.color}18`,
+                            color: meta.color,
                           }}
                         >
-                          {/* Outer ring */}
-                          <circle
-                            cx={x} cy={y} r={r}
-                            fill="white"
-                            stroke={dimmed ? "#cbd5e1" : role.color}
-                            strokeWidth={isBuyer ? 3 : 2.5}
-                            className="transition-all duration-200 dark:fill-slate-900"
-                          />
-                          {/* Inner dot for buyer line */}
-                          {isBuyer && (
-                            <circle
-                              cx={x} cy={y} r={4}
-                              fill={dimmed ? "#cbd5e1" : role.color}
-                              className="transition-all duration-200"
-                            />
-                          )}
-                        </g>
+                          {meta.icon} 与{meta.label[locale]}互动
+                        </span>
                       );
                     })}
-                  </g>
-                );
-              })}
+                  </div>
+                </div>
+              </div>
 
-              {/* Interchange connectors: vertical lines linking stations at the same stage */}
-              {JOURNEY_STAGES.map((stage) => {
-                const x = STATION_X[stage.id];
-                // Get roles active at this stage
-                const activeRoles = ROLES.filter((r) => r.activeStages.includes(stage.id));
-                if (activeRoles.length < 2) return null;
-
-                const minY = Math.min(...activeRoles.map((r) => TRACK_Y[r.id]));
-                const maxY = Math.max(...activeRoles.map((r) => TRACK_Y[r.id]));
-                const isHovered = hoveredStage === stage.id;
-
-                return (
-                  <line
-                    key={`interchange-${stage.id}`}
-                    x1={x} y1={minY + STATION_R}
-                    x2={x} y2={maxY - STATION_R}
-                    stroke={isHovered ? "#94a3b8" : "#cbd5e1"}
-                    strokeWidth={isHovered ? 2 : 1}
-                    className="transition-all duration-200 dark:stroke-slate-600"
-                  />
-                );
-              })}
-
-              {/* Stage labels at top */}
-              {JOURNEY_STAGES.map((stage) => {
-                const x = STATION_X[stage.id];
-                return (
-                  <g key={`label-${stage.id}`}>
-                    <text
-                      x={x}
-                      y={48}
-                      textAnchor="middle"
-                      className="fill-slate-500 dark:fill-slate-400"
-                      style={{ fontSize: 11, fontWeight: 700 }}
-                    >
-                      {stage.label[locale]}
-                    </text>
-                    <text
-                      x={x}
-                      y={64}
-                      textAnchor="middle"
-                      className="fill-slate-400 dark:fill-slate-500"
-                      style={{ fontSize: 9 }}
-                    >
-                      {stage.desc[locale]}
-                    </text>
-                  </g>
-                );
-              })}
-
-              {/* Station labels: role names next to stations */}
-              {ROLES.map((role) => {
-                const dimmed = isRoleDimmed(role.id);
-                return role.activeStages.map((stageId) => {
-                  const x = STATION_X[stageId];
-                  const y = TRACK_Y[role.id];
-                  const stageHovered = hoveredStage === stageId;
-                  const isSelected = selectedRoleStage?.role === role.id && selectedRoleStage?.stage === stageId;
-                  if (!stageHovered && !isSelected && !(selectedRoleStage?.role === role.id && !selectedRoleStage.stage)) return null;
-                  return (
-                    <text
-                      key={`sname-${role.id}-${stageId}`}
-                      x={x + STATION_R + 8}
-                      y={y + 4}
-                      className="fill-slate-700 dark:fill-slate-300"
-                      style={{ fontSize: 9, fontWeight: 600 }}
-                      opacity={dimmed ? 0.3 : 1}
-                    >
-                      {role.label[locale]}
-                    </text>
-                  );
-                });
-              })}
-            </svg>
-
-            {/* ── Overlay: node cards near stations ── */}
-            <div className="relative pb-10" style={{ marginTop: -10 }}>
-              {ROLES.map((role) =>
-                role.activeStages.map((stageId) => {
-                  const cellNodes = getNodesForStation(graphNodes, stageId, role.id);
-                  if (cellNodes.length === 0) return null;
-
-                  const stageIdx = JOURNEY_STAGES.findIndex((s) => s.id === stageId);
-                  const xPct = ((STATION_X[stageId] - 40) / SVG_W) * 100;
-                  const roleIdx = ROLES.findIndex((r) => r.id === role.id);
-                  const isSelected = selectedRoleStage?.role === role.id && selectedRoleStage?.stage === stageId;
-                  const isOtherSelected = selectedRoleStage && (selectedRoleStage.role !== role.id || selectedRoleStage.stage !== stageId);
-
+              {/* Other role cards */}
+              <div className="grid w-full max-w-2xl grid-cols-1 gap-4 sm:grid-cols-2">
+                {currentStage.activeRoles.map((roleId) => {
+                  const meta = ROLE_META[roleId];
+                  const roleNodes = nodesByRole[roleId] || [];
                   return (
                     <div
-                      key={`cards-${role.id}-${stageId}`}
-                      className="absolute transition-all duration-300"
-                      style={{
-                        left: `${xPct}%`,
-                        top: `${roleIdx * 32}px`,
-                        width: 170,
-                        opacity: isOtherSelected ? 0.15 : 1,
-                        transform: isSelected ? "scale(1.05)" : "scale(1)",
-                        zIndex: isSelected ? 10 : 1,
-                      }}
+                      key={roleId}
+                      className="rounded-2xl border-2 bg-white p-4 shadow-md transition-all dark:bg-slate-900"
+                      style={{ borderColor: `${meta.color}60` }}
                     >
-                      <div className="flex flex-wrap gap-1">
-                        {cellNodes.map((node) => {
-                          const dimmed = isDimmed(node.id);
-                          const highlighted = aiHighlightedSet.has(node.id);
+                      <div className="mb-2 flex items-center gap-2">
+                        <div
+                          className="flex h-8 w-8 items-center justify-center rounded-xl text-sm"
+                          style={{
+                            backgroundColor: `${meta.color}18`,
+                            color: meta.color,
+                          }}
+                        >
+                          {meta.icon}
+                        </div>
+                        <div>
+                          <div
+                            className="text-[13px] font-bold"
+                            style={{ color: meta.color }}
+                          >
+                            {meta.label[locale]}
+                          </div>
+                          <div className="text-[10px] text-slate-400 dark:text-slate-500">
+                            {roleNodes.length} 个节点参与
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {roleNodes.map((node) => {
+                          const highlighted = isAiHighlighted(node.id);
                           return (
-                            <button
+                            <span
                               key={node.id}
-                              onClick={() => {
-                                exitAiFocus();
-                                setSelectedRoleStage({ role: role.id, stage: stageId });
-                              }}
-                              className={`rounded-lg border px-2 py-1 text-left transition-all hover:shadow-sm ${
-                                dimmed
-                                  ? "border-slate-100 bg-white/30 opacity-25 dark:border-slate-800 dark:bg-slate-900/20"
-                                  : highlighted
-                                    ? "border-amber-400 bg-amber-50 shadow-sm dark:border-amber-500 dark:bg-amber-950/50"
-                                    : "border-slate-200 bg-white hover:border-slate-300 dark:border-slate-700 dark:bg-slate-900 dark:hover:border-slate-600"
+                              className={`rounded-lg border px-2 py-1 text-[10px] font-semibold transition-all ${
+                                highlighted
+                                  ? "border-amber-400 bg-amber-50 dark:border-amber-500 dark:bg-amber-950/50"
+                                  : "border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800"
                               }`}
                               style={{
-                                ...(highlighted && !dimmed ? { borderColor: role.color } : {}),
+                                color: highlighted ? undefined : meta.color,
                               }}
                             >
-                              <div
-                                className="text-[10px] font-semibold leading-tight"
-                                style={{ color: dimmed ? "#94a3b8" : role.color }}
-                              >
-                                {node.title[locale]}
-                              </div>
-                              {node.tags.length > 0 && (
-                                <div className="mt-0.5 flex gap-0.5">
-                                  {node.tags.slice(0, 2).map((tag) => (
-                                    <span
-                                      key={tag}
-                                      className="rounded px-1 py-0 text-[7px] font-medium text-slate-400 dark:text-slate-500"
-                                    >
-                                      {tag}
-                                    </span>
-                                  ))}
-                                </div>
-                              )}
-                            </button>
+                              {node.title[locale]}
+                            </span>
                           );
                         })}
                       </div>
                     </div>
                   );
-                }),
+                })}
+              </div>
+
+              {/* Empty state when only buyer has action */}
+              {currentStage.activeRoles.length === 0 && (
+                <div className="py-8 text-center text-sm text-slate-400 dark:text-slate-500">
+                  此阶段买家独立行动，无需与其他角色互动
+                </div>
               )}
-              {/* Spacer for card area */}
-              <div style={{ height: ROLES.length * 32 + 40 }} />
+
+              {/* ── Minimap ── */}
+              <div className="w-full max-w-2xl">
+                <Minimap
+                  currentStage={currentStage.id}
+                  onNavigate={(stageId) => {
+                    const idx = JOURNEY_STAGES.findIndex((s) => s.id === stageId);
+                    if (idx >= 0) goToStage(idx);
+                  }}
+                  nodes={graphNodes}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* ── Stage navigation timeline ── */}
+          <div className="shrink-0 border-t border-slate-200/60 bg-white/80 px-4 py-3 backdrop-blur dark:border-slate-800/60 dark:bg-slate-900/80">
+            <div className="mx-auto flex max-w-2xl items-center justify-between">
+              {JOURNEY_STAGES.map((stage, i) => {
+                const isCurrent = i === currentStageIdx;
+                const isPast = i < currentStageIdx;
+                return (
+                  <button
+                    key={stage.id}
+                    onClick={() => goToStage(i)}
+                    className="group flex flex-col items-center gap-1"
+                  >
+                    <div
+                      className={`flex h-9 w-9 items-center justify-center rounded-full text-xs font-bold transition-all ${
+                        isCurrent
+                          ? "scale-110 text-white shadow-lg"
+                          : isPast
+                            ? "text-white opacity-60"
+                            : "bg-slate-100 text-slate-400 dark:bg-slate-800 dark:text-slate-500"
+                      }`}
+                      style={{
+                        backgroundColor: isCurrent || isPast ? stage.color : undefined,
+                      }}
+                      title={`${stage.label[locale]}: ${stage.buyerAction[locale]}`}
+                    >
+                      {isPast ? <Check className="h-4 w-4" /> : stage.number}
+                    </div>
+                    <span
+                      className={`text-[10px] font-medium transition-colors ${
+                        isCurrent
+                          ? "text-slate-800 dark:text-slate-200"
+                          : "text-slate-400 dark:text-slate-500"
+                      }`}
+                    >
+                      {stage.label[locale]}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="mx-auto mt-2 max-w-2xl">
+              <div className="h-1.5 rounded-full bg-slate-100 dark:bg-slate-800">
+                <div
+                  className="h-full rounded-full transition-all duration-500"
+                  style={{
+                    width: `${((currentStageIdx + 1) / JOURNEY_STAGES.length) * 100}%`,
+                    backgroundColor: currentStage.color,
+                  }}
+                />
+              </div>
+            </div>
+
+            <div className="mt-2 text-center text-[10px] text-slate-400 dark:text-slate-500">
+              ← → 方向键切换阶段 · 点击时间轴跳转 · 底部 AI 导师按需规划路径
             </div>
           </div>
         </div>
