@@ -36,6 +36,7 @@ interface NavEntry {
 }
 
 const PRIMARY_NAV: NavEntry[] = [
+  { href: "/explore", label: "nav.explore", icon: Globe },
   { href: "/learn", label: "nav.controlCenter", icon: Network },
   { href: "/chat", label: "nav.guidanceChat", icon: MessageSquare, adminOnly: true },
   {
@@ -52,7 +53,6 @@ const PRIMARY_NAV: NavEntry[] = [
   },
   { href: "/curriculum", label: "nav.curriculum", icon: ClipboardList, adminOnly: true },
   // ↓ 普通会员可见的条目
-  { href: "/explore", label: "nav.explore", icon: Globe },
   { href: "/knowledge", label: "nav.knowledgeVault", icon: BookOpen },
   { href: "/book", label: "nav.playbooks", icon: Library },
   { href: "/feedback", label: "nav.feedback", icon: MessageSquareText },
@@ -88,7 +88,7 @@ export function SidebarShell({
   // 普通会员只看到非 adminOnly 的条目；管理员看全部
   const visibleNav = PRIMARY_NAV.filter((entry) => isAdmin || !entry.adminOnly);
   // 知识图谱学习就是默认首页。
-  const logoHref = "/learn";
+  const logoHref = "/explore";
 
   const isActivePath = (href: string) =>
     href === "/" ? pathname === "/" : pathname.startsWith(href);
