@@ -88,7 +88,7 @@ export function SidebarShell({
   // 普通会员只看到非 adminOnly 的条目；管理员看全部
   const visibleNav = PRIMARY_NAV.filter((entry) => isAdmin || !entry.adminOnly);
   // 知识图谱学习就是默认首页。
-  const logoHref = "/explore";
+  const logoHref = "/";
 
   const isActivePath = (href: string) =>
     href === "/" ? pathname === "/" : pathname.startsWith(href);

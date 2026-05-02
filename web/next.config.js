@@ -52,16 +52,6 @@ const nextConfig = {
   // Transpile mermaid and related packages for proper ESM handling
   transpilePackages: ["mermaid"],
 
-  async redirects() {
-    return [
-      {
-        source: "/",
-        destination: "/explore",
-        permanent: true,
-      },
-    ];
-  },
-
   async rewrites() {
     const backend =
       process.env.NEXT_PROXY_BACKEND ||

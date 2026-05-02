@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   BookOpen,
+  Compass,
   Globe,
   Library,
   MessageSquareText,
@@ -19,7 +20,7 @@ interface MobileNavEntry {
 }
 
 const MOBILE_NAV: MobileNavEntry[] = [
-  { href: "/learn", label: "首页", icon: Network },
+  { href: "/", label: "首页", icon: Network },
   { href: "/explore", label: "生态图谱", icon: Globe },
   { href: "/knowledge", label: "知识来源", icon: BookOpen },
   { href: "/book", label: "通关手册", icon: Library },
