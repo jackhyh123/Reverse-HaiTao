@@ -1,79 +1,216 @@
 "use client";
 
 import { useCallback, useMemo, useState } from "react";
-import { Check, X } from "lucide-react";
+import { Check, ChevronRight, X } from "lucide-react";
 import FloatingAITutor from "@/components/learn/FloatingAITutor";
-import {
-  DEFAULT_EXPLORE_GRAPH,
-  type ExploreNode as ExploreNodeType,
-} from "@/lib/explore-graph";
+import { DEFAULT_EXPLORE_GRAPH } from "@/lib/explore-graph";
 
 type LocaleKey = "zh" | "en";
 
 // ═══════════════════════════════════════════════════════════════
-// Data: Journey Stages & Roles
+// Journey Stages
 // ═══════════════════════════════════════════════════════════════
 
 const JOURNEY_STAGES = [
-  { id: "discovery", label: { zh: "① 发现", en: "① Discovery" }, desc: { zh: "用户在哪看到产品", en: "Where buyers discover" }, color: "#f59e0b" },
-  { id: "verification", label: { zh: "② 验证", en: "② Verification" }, desc: { zh: "判断靠不靠谱", en: "Verify trust" }, color: "#f97316" },
-  { id: "decision", label: { zh: "③ 决策", en: "③ Decision" }, desc: { zh: "下决心购买", en: "Make decision" }, color: "#ef4444" },
-  { id: "purchase", label: { zh: "④ 购买", en: "④ Purchase" }, desc: { zh: "下单付款", en: "Place order" }, color: "#3b82f6" },
-  { id: "delivery", label: { zh: "⑤ 收货", en: "⑤ Delivery" }, desc: { zh: "商品到手", en: "Receive goods" }, color: "#10b981" },
-  { id: "sharing", label: { zh: "⑥ 分享", en: "⑥ Sharing" }, desc: { zh: "晒单口碑回流", en: "Share & review" }, color: "#8b5cf6" },
+  { id: "discovery", number: 1, label: { zh: "① 发现", en: "① Discovery" }, question: { zh: "用户在哪看到产品", en: "Where do buyers discover?" }, color: "#f59e0b" },
+  { id: "verification", number: 2, label: { zh: "② 验证", en: "② Verification" }, question: { zh: "怎么判断靠不靠谱", en: "How to verify trust?" }, color: "#f97316" },
+  { id: "decision", number: 3, label: { zh: "③ 决策", en: "③ Decision" }, question: { zh: "怎么下决心购买", en: "How to decide?" }, color: "#ef4444" },
+  { id: "purchase", number: 4, label: { zh: "④ 购买", en: "④ Purchase" }, question: { zh: "在哪下单付款", en: "Where to purchase?" }, color: "#3b82f6" },
+  { id: "delivery", number: 5, label: { zh: "⑤ 收货", en: "⑤ Delivery" }, question: { zh: "商品怎么到手", en: "How does it arrive?" }, color: "#10b981" },
+  { id: "sharing", number: 6, label: { zh: "⑥ 分享", en: "⑥ Sharing" }, question: { zh: "怎么晒单形成口碑", en: "How to share & review?" }, color: "#8b5cf6" },
 ];
 
-interface RoleDef {
-  id: string;
-  label: { zh: string; en: string };
-  color: string;
-  subtypes: string;
-  icon: string;
-  activeStages: string[];
+// ═══════════════════════════════════════════════════════════════
+// Role-specific stage content
+// ═══════════════════════════════════════════════════════════════
+
+interface StageCard {
+  title: string;
+  description: string;
+  /** For buyer: which channel/platform/tool */
+  source?: string;
+  /** For seller/platform: suggested action verb */
+  action?: string;
 }
 
-const ROLES: RoleDef[] = [
-  { id: "buyer", icon: "🧑‍💻", label: { zh: "用户/买家", en: "Buyer" }, color: "#10b981", subtypes: "搜索型 · 冲动型 · 社区型 · 批发型", activeStages: ["discovery", "verification", "decision", "purchase", "delivery", "sharing"] },
-  { id: "kol", icon: "📢", label: { zh: "KOL / 社区版主", en: "KOL" }, color: "#ec4899", subtypes: "大KOL · 小KOL · Reddit版主 · Discord主", activeStages: ["discovery", "verification", "decision", "sharing"] },
-  { id: "platform", icon: "🏪", label: { zh: "反淘平台", en: "Platform" }, color: "#3b82f6", subtypes: "代理型 · 工具型 · 自营/半自营", activeStages: ["discovery", "purchase", "delivery"] },
-  { id: "seller", icon: "📦", label: { zh: "卖家", en: "Seller" }, color: "#f59e0b", subtypes: "签约卖家 · 独立卖家 · 纯国内卖家", activeStages: ["purchase", "delivery"] },
-];
+interface StageContent {
+  /** What happens at this stage for this role */
+  summary: string;
+  /** Key cards shown at this stage */
+  cards: StageCard[];
+  /** Connected to the next stage (continuity) */
+  nextHint?: string;
+}
 
-const ROLE_MAP = Object.fromEntries(ROLES.map((r) => [r.id, r])) as Record<string, RoleDef>;
-
-// Node → stages & roles
-const NODE_PLACEMENT: Record<string, { stages: string[]; roles: string[] }> = {
-  kol_general:            { stages: ["discovery", "decision", "sharing"],  roles: ["kol"] },
-  private_community:       { stages: ["verification", "decision"],          roles: ["kol"] },
-  reddit_community:        { stages: ["verification", "sharing"],           roles: ["kol"] },
-  platform_traffic:        { stages: ["discovery"],                         roles: ["platform"] },
-  ecom_platform:           { stages: ["purchase"],                          roles: ["platform", "seller"] },
-  agent_platform:          { stages: ["purchase", "delivery"],              roles: ["platform"] },
-  standalone_site:         { stages: ["purchase"],                          roles: ["platform"] },
-  social_commerce:         { stages: ["discovery", "decision", "purchase"], roles: ["kol", "platform"] },
-  seller_distributor:      { stages: ["purchase", "delivery"],              roles: ["seller"] },
-  warehouse_logistics:     { stages: ["delivery"],                          roles: ["seller", "platform"] },
-  qc_inspection:           { stages: ["verification", "delivery"],          roles: ["seller", "platform"] },
-  payment_api:             { stages: ["purchase"],                          roles: ["platform"] },
-  domestic_api:            { stages: ["purchase"],                          roles: ["platform"] },
-  supply_chain_upstream:   { stages: ["purchase"],                          roles: ["seller"] },
-  currency_tax:            { stages: ["purchase", "delivery"],              roles: ["platform"] },
+const BUYER_CONTENT: Record<string, StageContent> = {
+  discovery: {
+    summary: "买家刷到种草内容，第一次发现产品",
+    cards: [
+      { title: "KOL / 达人内容", description: "TikTok、YouTube、小红书上达人发布种草视频和图文，解决「发现」和「初步信任」", source: "TikTok · YouTube · 小红书" },
+      { title: "平台算法推荐", description: "TikTok Shop、淘宝的推荐算法把商品推给可能感兴趣的用户", source: "TikTok Shop · 淘宝" },
+      { title: "独立社区讨论", description: "Reddit 社区（如 r/RepFashion）里用户自发的推荐和避坑帖", source: "Reddit" },
+    ],
+    nextHint: "被勾起兴趣后，买家会去验证",
+  },
+  verification: {
+    summary: "买家不信任广告，主动搜索验证产品和卖家",
+    cards: [
+      { title: "Reddit 社区验证", description: "在 r/RepFashion 等社区搜索卖家名字 + review，看真实买家反馈。版主和资深用户帮你判断靠不靠谱", source: "Reddit · r/RepFashion" },
+      { title: "Yupoo 相册看 QC 图", description: "卖家在 Yupoo 上传质检实拍图，买家逐张检查细节、走线、标牌", source: "Yupoo" },
+      { title: "Discord 私域深聊", description: "加入 Discord 服务器，直接问买过的人尺码、质量、物流体验", source: "Discord" },
+    ],
+    nextHint: "验证通过后，开始下决心",
+  },
+  decision: {
+    summary: "买家在私域社区深度交流后下决心购买",
+    cards: [
+      { title: "Discord / Telegram 群聊", description: "在私域群里直接问 KOL 和买过的人：尺码偏不偏、质量怎么样、物流要多久", source: "Discord · Telegram" },
+      { title: "KOL 专属链接", description: "达人在直播或视频里放专属链接/折扣码，直接推动购买决策", source: "TikTok · Instagram" },
+      { title: "比价和选物流", description: "在不同代理平台之间对比价格、物流时效、服务费", source: "Pandabuy · Superbuy · Wegobuy" },
+    ],
+    nextHint: "下定决心后，去下单",
+  },
+  purchase: {
+    summary: "买家在代理平台下单付款",
+    cards: [
+      { title: "代理平台代购", description: "在 Pandabuy、Superbuy、Wegobuy 粘贴商品链接，平台帮你从淘宝/1688下单", source: "Pandabuy · Superbuy · Wegobuy" },
+      { title: "选择增值服务", description: "勾选 QC 拍照验货、真空包装、加固包装等增值服务", source: "代理平台内置服务" },
+      { title: "跨境支付", description: "通过 Stripe、PayPal、Alipay+ 完成跨境付款", source: "Stripe · PayPal · Alipay+" },
+    ],
+    nextHint: "付款后进入履约环节",
+  },
+  delivery: {
+    summary: "商品经过仓库、质检、集运送到买家手中",
+    cards: [
+      { title: "仓库收货验货", description: "国内仓库收到商品后拍照验货，买家在线确认 QC 照片", source: "仓库 QC 服务" },
+      { title: "合包集运", description: "多个订单合并打包，减少国际运费", source: "代理平台集运" },
+      { title: "国际物流 + 清关", description: "通过 EMS、DHL、专线等发往海外，清关后派送到手", source: "EMS · DHL · 专线物流" },
+    ],
+    nextHint: "收到货后，买家会去晒单",
+  },
+  sharing: {
+    summary: "买家晒单分享，形成口碑回流到发现阶段",
+    cards: [
+      { title: "Reddit 晒单帖", description: "在 r/RepFashion 发开箱帖、穿搭建议、评分，成为社区贡献者", source: "Reddit" },
+      { title: "Discord 反馈", description: "在 Discord 群里发上身图和体验，直接影响群友的购买决策", source: "Discord" },
+      { title: "成为 KOC", description: "持续高质量分享 → 积累信誉 → 成为关键意见消费者，甚至开始接合作", source: "Reddit · Discord" },
+    ],
+    nextHint: "口碑回流到发现阶段，形成流量闭环 🔄",
+  },
 };
 
-// ═══════════════════════════════════════════════════════════════
-// Helpers
-// ═══════════════════════════════════════════════════════════════
+const PLATFORM_CONTENT: Record<string, StageContent> = {
+  discovery: {
+    summary: "平台需要出现在买家发现产品的渠道中",
+    cards: [
+      { title: "签约 KOL 推广", description: "找到匹配的达人洽谈合作：寄样 → 签约 → 专属链接 → 佣金分成", action: "找 KOL 洽谈合作" },
+      { title: "SEO 和内容布局", description: "在 Reddit、YouTube 布局品牌关键词，让买家搜索时能找到你", action: "布局 SEO 内容" },
+      { title: "算法投放", description: "在 TikTok、淘宝投放信息流广告，精准触达目标买家", action: "投放精准广告" },
+    ],
+  },
+  verification: {
+    summary: "平台需要在验证渠道建立信任",
+    cards: [
+      { title: "Reddit 口碑管理", description: "监控 r/RepFashion 等社区对平台的讨论，及时回应差评，鼓励好评", action: "管理社区口碑" },
+      { title: "QC 服务标准化", description: "建立标准化的 QC 拍照流程，让买家的验证体验一致可靠", action: "标准化 QC 流程" },
+      { title: "透明化展示", description: "在平台展示卖家评分、交易量、退货率等指标，降低买家的验证成本", action: "展示卖家信用指标" },
+    ],
+  },
+  decision: {
+    summary: "平台需要在决策环节降低摩擦",
+    cards: [
+      { title: "嵌入 Discord 生态", description: "在主流 Discord 服务器建立官方频道，让买家直接咨询", action: "建立 Discord 官方频道" },
+      { title: "KOL 直播带货", description: "与 KOL 合作在 TikTok/Instagram 直播，实时展示商品并完成成交", action: "合作 KOL 直播" },
+      { title: "比价工具优化", description: "提供清晰的价格对比、物流时效估算，帮助买家快速决策", action: "优化比价体验" },
+    ],
+  },
+  purchase: {
+    summary: "平台的核心战场——优化下单到支付的全链路",
+    cards: [
+      { title: "接入国内电商 API", description: "对接 1688、淘宝开放平台、拼多多 API，自动同步商品和价格", action: "对接电商 API" },
+      { title: "支付链路优化", description: "接入 Stripe、PayPal 等跨境支付，支持多币种结算", action: "接入跨境支付" },
+      { title: "用户体验打磨", description: "优化移动端下单流程、商品搜索、购物车体验", action: "优化下单体验" },
+    ],
+  },
+  delivery: {
+    summary: "平台需要让履约可追踪、可信任",
+    cards: [
+      { title: "仓库 + 集运系统", description: "自建或合作国内仓库，建立收货→QC→合包→发出的标准流水线", action: "建立仓储物流体系" },
+      { title: "物流追踪透明化", description: "买家实时看到物流节点：已入库→已QC→已合包→已发出→清关中→派送中", action: "物流追踪系统" },
+      { title: "清关合规", description: "处理各国关税、增值税申报，避免包裹被扣", action: "处理清关合规" },
+    ],
+  },
+  sharing: {
+    summary: "平台需要激励买家分享，形成增长飞轮",
+    cards: [
+      { title: "晒单激励机制", description: "买家晒单返现、积分、优惠券，主动驱动口碑内容生产", action: "建立晒单激励" },
+      { title: "社区运营", description: "在 Reddit、Discord 培养品牌倡导者，让满意的买家帮你拉新", action: "培养品牌倡导者" },
+      { title: "数据闭环", description: "追踪「哪个 KOL → 多少点击 → 多少下单 → 多少晒单」的完整漏斗", action: "追踪增长漏斗" },
+    ],
+  },
+};
 
-function getNodesForCell(
-  nodes: ExploreNodeType[],
-  stageId: string,
-  roleId: string,
-): ExploreNodeType[] {
-  return nodes.filter((n) => {
-    const p = NODE_PLACEMENT[n.id];
-    if (!p) return false;
-    return p.stages.includes(stageId) && p.roles.includes(roleId);
-  });
+const SELLER_CONTENT: Record<string, StageContent> = {
+  discovery: {
+    summary: "卖家需要让自己的产品出现在买家发现渠道中",
+    cards: [
+      { title: "找到匹配的 KOL 合作", description: "根据产品品类找到风格匹配的达人 → 私信洽谈 → 寄样 → 谈佣金", action: "找 KOL 寄样合作" },
+      { title: "在 Reddit 建立存在感", description: "主动在 r/RepFashion 等社区回答买家问题，建立信誉后再推广产品", action: "Reddit 社区运营" },
+      { title: "优化商品主图和描述", description: "1688/淘宝的商品图可能不够好，自己拍高质量的白底图和上身图", action: "优化商品展示" },
+    ],
+  },
+  verification: {
+    summary: "卖家需要让买家能验证你的产品",
+    cards: [
+      { title: "建立 Yupoo 相册", description: "上传高清 QC 实拍图到 Yupoo，按商品分类，方便买家查看细节", action: "建立 Yupoo 相册" },
+      { title: "积累 Reddit 好评", description: "每成交一单请买家在 Reddit 写 review，积累可搜索的信誉资产", action: "积累社区好评" },
+      { title: "提供 QC 服务", description: "发货前主动拍照发给买家确认，减少退货纠纷", action: "主动提供 QC 图" },
+    ],
+  },
+  decision: {
+    summary: "卖家需要在买家决策时提供推力",
+    cards: [
+      { title: "在 Discord 建立信任", description: "加入买家活跃的 Discord 服务器，真诚回答问题（不硬广），建立个人信誉", action: "Discord 社区参与" },
+      { title: "限时优惠推动决策", description: "给 KOL 的粉丝提供专属折扣码，制造紧迫感", action: "设置 KOL 专属折扣" },
+      { title: "提供尺码建议", description: "整理详细的尺码对照表和推荐建议，减少买家犹豫", action: "整理尺码指南" },
+    ],
+  },
+  purchase: {
+    summary: "卖家需要在购买环节让交易顺畅",
+    cards: [
+      { title: "在代理平台铺货", description: "将商品信息同步到 Pandabuy、Superbuy 等平台，让买家可以直接下单", action: "平台铺货上架" },
+      { title: "对接 1688/淘宝", description: "确保商品在 1688 或淘宝的链接有效、库存准确、价格更新", action: "维护货源链接" },
+      { title: "处理定制需求", description: "买家可能有特殊尺码或定制需求，建立快速响应机制", action: "响应定制需求" },
+    ],
+  },
+  delivery: {
+    summary: "卖家需要保证商品准时完好到达买家手中",
+    cards: [
+      { title: "发货到合作仓库", description: "将商品发到代理平台指定的国内仓库，确保包装完好", action: "发货到仓库" },
+      { title: "配合 QC 流程", description: "如果仓库 QC 发现问题，及时换货或与买家沟通", action: "配合 QC 换货" },
+      { title: "选择可靠物流", description: "根据目的地推荐最合适的物流方案（EMS/DHL/专线）", action: "推荐物流方案" },
+    ],
+  },
+  sharing: {
+    summary: "卖家需要让满意的买家帮你传播",
+    cards: [
+      { title: "请求买家晒单", description: "买家收货后主动跟进，礼貌请求在 Reddit/Discord 分享体验", action: "跟进请求晒单" },
+      { title: "返现激励好评", description: "给予晒单买家小额返现或下次折扣，形成正向循环", action: "晒单返现激励" },
+      { title: "建立复购关系", description: "通过 Discord/微信维护老客户关系，新品推送、老客折扣", action: "维护老客复购" },
+    ],
+  },
+};
+
+const ROLE_META: Record<string, { label: { zh: string; en: string }; color: string; icon: string }> = {
+  buyer:    { label: { zh: "买家视角", en: "Buyer" }, color: "#10b981", icon: "🧑‍💻" },
+  platform: { label: { zh: "平台视角", en: "Platform" }, color: "#3b82f6", icon: "🏪" },
+  seller:   { label: { zh: "卖家视角", en: "Seller" }, color: "#f59e0b", icon: "📦" },
+};
+
+function getContent(role: string): Record<string, StageContent> {
+  if (role === "platform") return PLATFORM_CONTENT;
+  if (role === "seller") return SELLER_CONTENT;
+  return BUYER_CONTENT;
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -93,111 +230,26 @@ interface AiFocusState {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// Quick questions
+// Quick questions (role-aware)
 // ═══════════════════════════════════════════════════════════════
 
-const EXPLORE_QUICK_QUESTIONS = [
-  "我想做 TikTok 带货，怎么入手？",
-  "怎么找到靠谱的国内货源？",
-  "独立站和代理平台哪个更适合新手？",
-  "跨境物流都有哪些方式？",
-];
-
-// ═══════════════════════════════════════════════════════════════
-// Sub-components
-// ═══════════════════════════════════════════════════════════════
-
-/** A mini card button for a single node */
-function NodeCard({
-  node,
-  locale,
-  highlight,
-  roleColor,
-  onClick,
-  onHoverIn,
-  onHoverOut,
-  graphNodes,
-}: {
-  node: ExploreNodeType;
-  locale: LocaleKey;
-  highlight: string;
-  roleColor: string;
-  onClick: () => void;
-  onHoverIn: () => void;
-  onHoverOut: () => void;
-  graphNodes: ExploreNodeType[];
-}) {
-  const [showTooltip, setShowTooltip] = useState(false);
-
-  return (
-    <button
-      onClick={onClick}
-      onMouseEnter={() => { onHoverIn(); setShowTooltip(true); }}
-      onMouseLeave={() => { onHoverOut(); setShowTooltip(false); }}
-      className={`group relative rounded-lg border px-2.5 py-1.5 text-left transition-all duration-200 ${
-        highlight === "selected"
-          ? "z-10 scale-105 border-slate-800 bg-slate-800 text-white shadow-lg dark:border-slate-200 dark:bg-slate-200 dark:text-slate-900"
-          : highlight === "connected"
-            ? "scale-[1.02] border-slate-400 bg-slate-100 dark:border-slate-500 dark:bg-slate-800"
-            : highlight === "ai-highlight"
-              ? "scale-[1.03] border-amber-400 bg-amber-50 shadow-md dark:border-amber-500 dark:bg-amber-950/50"
-              : highlight === "dimmed"
-                ? "border-slate-100 bg-white/40 opacity-25 dark:border-slate-800 dark:bg-slate-900/20"
-                : "border-slate-200 bg-white hover:border-slate-300 hover:shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:hover:border-slate-600"
-      }`}
-      style={{
-        ...((highlight === "connected" || highlight === "ai-highlight")
-          ? { borderColor: roleColor }
-          : {}),
-      }}
-    >
-      <div className="text-[11px] font-semibold leading-tight">
-        {node.title[locale]}
-      </div>
-      {node.tags.length > 0 && (
-        <div className="mt-0.5 flex gap-0.5">
-          {node.tags.slice(0, 2).map((tag) => (
-            <span
-              key={tag}
-              className={`rounded px-1 py-0 text-[8px] font-medium ${
-                highlight === "selected"
-                  ? "bg-white/20 text-white/80"
-                  : "bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400"
-              }`}
-            >
-              {tag}
-            </span>
-          ))}
-        </div>
-      )}
-
-      {/* Tooltip */}
-      {showTooltip && (
-        <div
-          className="pointer-events-none absolute bottom-full left-1/2 z-20 mb-2 -translate-x-1/2 rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-xl dark:border-slate-700 dark:bg-slate-900"
-          style={{ minWidth: 220 }}
-        >
-          <div className="text-[11px] leading-relaxed text-slate-600 dark:text-slate-300">
-            {node.summary[locale]}
-          </div>
-          {node.connections && node.connections.length > 0 && (
-            <div className="mt-1.5 border-t border-slate-100 pt-1.5 dark:border-slate-800">
-              <div className="mb-0.5 text-[9px] font-bold uppercase text-slate-400">
-                关联节点
-              </div>
-              {node.connections.map((c, i) => (
-                <div key={i} className="text-[10px] text-slate-500 dark:text-slate-400">
-                  → {graphNodes.find((n) => n.id === c.target)?.title[locale] || c.target}{" "}
-                  <span className="text-slate-300 dark:text-slate-600">({c.relation})</span>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-    </button>
-  );
-}
+const QUICK_QUESTIONS: Record<string, string[]> = {
+  buyer: [
+    "第一次买反淘，应该从哪个平台开始？",
+    "怎么在 Reddit 上判断一个卖家靠不靠谱？",
+    "Pandabuy 和 Superbuy 哪个更好用？",
+  ],
+  platform: [
+    "怎么找到愿意合作的 KOL？",
+    "跨境支付接入 Stripe 还是 PayPal？",
+    "仓库和物流怎么搭建？",
+  ],
+  seller: [
+    "怎么找到匹配的 KOL 寄样合作？",
+    "怎么在 Reddit 上积累第一批好评？",
+    "1688 和淘宝货源有什么区别？",
+  ],
+};
 
 // ═══════════════════════════════════════════════════════════════
 // Main page
@@ -207,21 +259,12 @@ export default function ExplorePage() {
   const locale: LocaleKey = "zh";
   const { domains, nodes: graphNodes } = DEFAULT_EXPLORE_GRAPH;
 
-  // "all" = full matrix; otherwise one of: buyer | kol | platform | seller
-  const [selectedRole, setSelectedRole] = useState<string>("all");
-  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
-  const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
+  const [selectedRole, setSelectedRole] = useState<string>("buyer");
   const [aiFocusState, setAiFocusState] = useState<AiFocusState | null>(null);
 
   const inAiFocus = aiFocusState !== null;
-  const inSelect = selectedNodeId !== null;
-  const inRoleView = selectedRole !== "all";
-  const currentRole = inRoleView ? ROLE_MAP[selectedRole] : null;
-
-  const aiHighlightedSet = useMemo(
-    () => new Set(aiFocusState?.highlightedNodes || []),
-    [aiFocusState],
-  );
+  const roleMeta = ROLE_META[selectedRole];
+  const content = useMemo(() => getContent(selectedRole), [selectedRole]);
 
   // Graph context for API
   const graphContext = useMemo(
@@ -235,33 +278,11 @@ export default function ExplorePage() {
     [domains, graphNodes],
   );
 
-  // Connected nodes for selection
-  const connectedNodeIds = useMemo(() => {
-    if (!selectedNodeId) return new Set<string>();
-    const node = graphNodes.find((n) => n.id === selectedNodeId);
-    if (!node) return new Set<string>();
-    return new Set((node.connections || []).map((c) => c.target));
-  }, [selectedNodeId, graphNodes]);
-
-  type Highlight = "selected" | "connected" | "ai-highlight" | "dimmed" | "normal";
-
-  const classifyHighlight = useCallback(
-    (nodeId: string): Highlight => {
-      if (nodeId === selectedNodeId) return "selected";
-      if (inSelect && connectedNodeIds.has(nodeId)) return "connected";
-      if (inAiFocus && aiHighlightedSet.has(nodeId)) return "ai-highlight";
-      if (inAiFocus || inSelect) return "dimmed";
-      return "normal";
-    },
-    [selectedNodeId, connectedNodeIds, inAiFocus, aiHighlightedSet, inSelect],
-  );
-
   // AI response handler
   const handleAIResponse = useCallback((data: Record<string, unknown>) => {
     const highlightedNodes = data.highlighted_nodes as string[] | undefined;
     const actionSteps = data.action_steps as ActionStep[] | undefined;
     if (highlightedNodes && highlightedNodes.length > 0) {
-      setSelectedNodeId(null);
       setAiFocusState({
         highlightedNodes,
         actionSteps: actionSteps || [],
@@ -271,7 +292,6 @@ export default function ExplorePage() {
   }, []);
 
   const exitAiFocus = useCallback(() => setAiFocusState(null), []);
-  const clearAll = useCallback(() => { setSelectedNodeId(null); exitAiFocus(); }, [exitAiFocus]);
 
   const toggleStepComplete = useCallback((index: number) => {
     setAiFocusState((prev) => {
@@ -292,17 +312,6 @@ export default function ExplorePage() {
     return `已为你聚焦"${names}"相关路径`;
   }, [aiFocusState, graphNodes, locale]);
 
-  // Determine role color for a node
-  const nodeRoleColor = useCallback(
-    (nodeId: string): string => {
-      const placement = NODE_PLACEMENT[nodeId];
-      if (!placement) return "#94a3b8";
-      const primaryRole = placement.roles[0];
-      return ROLE_MAP[primaryRole]?.color || "#94a3b8";
-    },
-    [],
-  );
-
   // ═════════════════════════════════════════════════════════════
   // Render
   // ═════════════════════════════════════════════════════════════
@@ -314,13 +323,16 @@ export default function ExplorePage() {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <h1 className="text-base font-bold text-slate-900 dark:text-slate-100">
-              反淘生态探索
+              反淘生态图谱
             </h1>
+            <span className="hidden text-[11px] text-slate-500 md:inline dark:text-slate-400">
+              选择你的身份，查看专属旅程和行动建议
+            </span>
           </div>
           <div className="flex items-center gap-2">
-            {(inSelect || inAiFocus) && (
+            {inAiFocus && (
               <button
-                onClick={clearAll}
+                onClick={exitAiFocus}
                 className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400 dark:hover:bg-slate-800"
               >
                 查看全景
@@ -332,38 +344,24 @@ export default function ExplorePage() {
           </div>
         </div>
 
-        {/* ── Role selector pills ── */}
-        <div className="mt-2.5 flex flex-wrap items-center gap-2">
+        {/* ── Role selector ── */}
+        <div className="mt-2.5 flex items-center gap-2">
           <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-            视角切换
+            我是
           </span>
-          <button
-            onClick={() => { setSelectedRole("all"); clearAll(); }}
-            className={`rounded-full px-3 py-1 text-[11px] font-bold transition-all ${
-              selectedRole === "all"
-                ? "bg-slate-800 text-white shadow dark:bg-slate-200 dark:text-slate-900"
-                : "bg-slate-100 text-slate-500 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-700"
-            }`}
-          >
-            全部视角
-          </button>
-          {ROLES.map((role) => (
+          {Object.entries(ROLE_META).map(([id, meta]) => (
             <button
-              key={role.id}
-              onClick={() => { setSelectedRole(role.id); clearAll(); }}
+              key={id}
+              onClick={() => { setSelectedRole(id); exitAiFocus(); }}
               className={`flex items-center gap-1.5 rounded-full px-3 py-1 text-[11px] font-bold transition-all ${
-                selectedRole === role.id
+                selectedRole === id
                   ? "text-white shadow"
-                  : "text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
+                  : "bg-slate-100 text-slate-500 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-700"
               }`}
-              style={
-                selectedRole === role.id
-                  ? { backgroundColor: role.color }
-                  : {}
-              }
+              style={selectedRole === id ? { backgroundColor: meta.color } : {}}
             >
-              <span className="text-xs">{role.icon}</span>
-              {role.label[locale]}
+              <span className="text-xs">{meta.icon}</span>
+              {meta.label[locale]}
             </button>
           ))}
         </div>
@@ -390,202 +388,93 @@ export default function ExplorePage() {
       {/* ── Main content ── */}
       <div className="relative min-h-0 flex-1 overflow-hidden">
         <div className="h-full overflow-auto" style={inAiFocus ? { marginRight: 340 } : undefined}>
-          {/* ── Stage headers ── */}
-          <div className="sticky top-0 z-10 grid grid-cols-[150px_repeat(6,1fr)] border-b border-slate-200/60 bg-white/95 backdrop-blur dark:border-slate-800/60 dark:bg-slate-900/95">
-            <div className="flex items-center justify-center px-3 py-3 text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-              {inRoleView ? `${currentRole!.icon} ${currentRole!.label[locale]}的旅程` : "角色 ↓ / 旅程 →"}
-            </div>
+          {/* ── Stage header ── */}
+          <div className="sticky top-0 z-10 grid grid-cols-6 border-b border-slate-200/60 bg-white/95 backdrop-blur dark:border-slate-800/60 dark:bg-slate-900/95">
             {JOURNEY_STAGES.map((stage) => (
               <div
                 key={stage.id}
-                className="flex flex-col items-center justify-center border-l border-slate-100 px-2 py-3 dark:border-slate-800"
+                className="flex flex-col items-center gap-0.5 border-l border-slate-100 px-2 py-3 first:border-l-0 dark:border-slate-800"
               >
                 <div className="text-[13px] font-bold" style={{ color: stage.color }}>
                   {stage.label[locale]}
                 </div>
-                <div className="mt-0.5 text-[10px] text-slate-400 dark:text-slate-500">
-                  {stage.desc[locale]}
+                <div className="text-[10px] text-slate-400 dark:text-slate-500">
+                  {stage.question[locale]}
                 </div>
               </div>
             ))}
           </div>
 
-          {!inRoleView ? (
-            /* ─────── FULL MATRIX (全部视角) ─────── */
-            <>
-              {ROLES.map((role) => {
-                const isBuyer = role.id === "buyer";
-                return (
-                  <div
-                    key={role.id}
-                    className={`grid grid-cols-[150px_repeat(6,1fr)] border-b border-slate-100 transition-colors dark:border-slate-800 ${
-                      isBuyer
-                        ? "bg-emerald-50/30 dark:bg-emerald-950/15"
-                        : "bg-white/60 hover:bg-white/90 dark:bg-slate-950/40 dark:hover:bg-slate-900/60"
-                    }`}
+          {/* ── Stage cards ── */}
+          <div className="grid grid-cols-6">
+            {JOURNEY_STAGES.map((stage) => {
+              const stageContent = content[stage.id];
+              const cards = stageContent?.cards || [];
+              return (
+                <div
+                  key={stage.id}
+                  className="border-l border-slate-100 p-3 first:border-l-0 dark:border-slate-800"
+                >
+                  {/* Summary */}
+                  <div className="mb-3 rounded-lg px-2.5 py-2 text-center text-[11px] font-medium leading-relaxed"
+                    style={{
+                      backgroundColor: `${stage.color}10`,
+                      color: stage.color,
+                    }}
                   >
-                    <div className="sticky left-0 z-[5] flex flex-col justify-center border-r border-slate-200/60 bg-inherit px-3 py-3 dark:border-slate-800/60">
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm">{role.icon}</span>
+                    {stageContent?.summary || "—"}
+                  </div>
+
+                  {/* Cards */}
+                  <div className="space-y-2.5">
+                    {cards.map((card, i) => (
+                      <div
+                        key={i}
+                        className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm transition-all hover:border-slate-300 hover:shadow-md dark:border-slate-700 dark:bg-slate-900 dark:hover:border-slate-600"
+                      >
                         <div
-                          className="h-2.5 w-2.5 shrink-0 rounded-full"
-                          style={{ backgroundColor: role.color }}
-                        />
-                        <span className="text-[13px] font-bold text-slate-800 dark:text-slate-200">
-                          {role.label[locale]}
-                        </span>
-                      </div>
-                      <span className="mt-0.5 text-[10px] leading-tight text-slate-400 dark:text-slate-500">
-                        {role.subtypes}
-                      </span>
-                    </div>
-                    {JOURNEY_STAGES.map((stage) => {
-                      const cellNodes = getNodesForCell(graphNodes, stage.id, role.id);
-                      return (
-                        <div
-                          key={`${role.id}-${stage.id}`}
-                          className="min-h-[105px] border-l border-slate-100 p-2 dark:border-slate-800"
+                          className="text-[12px] font-bold leading-tight text-slate-800 dark:text-slate-200"
+                          style={{ color: selectedRole === "buyer" ? undefined : roleMeta.color }}
                         >
-                          {cellNodes.length === 0 ? (
-                            <div className="flex h-full items-center justify-center">
-                              <span className="text-[10px] text-slate-200 dark:text-slate-800">—</span>
-                            </div>
-                          ) : (
-                            <div className="flex flex-wrap gap-1.5">
-                              {cellNodes.map((node) => {
-                                const hl = classifyHighlight(node.id);
-                                return (
-                                  <NodeCard
-                                    key={node.id}
-                                    node={node}
-                                    locale={locale}
-                                    highlight={hl}
-                                    roleColor={role.color}
-                                    graphNodes={graphNodes}
-                                    onClick={() => {
-                                      setSelectedNodeId(selectedNodeId === node.id ? null : node.id);
-                                      exitAiFocus();
-                                    }}
-                                    onHoverIn={() => setHoveredNodeId(node.id)}
-                                    onHoverOut={() => setHoveredNodeId(null)}
-                                  />
-                                );
-                              })}
-                            </div>
+                          {card.title}
+                        </div>
+                        <div className="mt-1 text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">
+                          {card.description}
+                        </div>
+                        <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                          {card.source && (
+                            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[9px] font-medium text-slate-500 dark:bg-slate-800 dark:text-slate-400">
+                              {card.source}
+                            </span>
+                          )}
+                          {card.action && (
+                            <span
+                              className="inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 text-[9px] font-bold text-white"
+                              style={{ backgroundColor: roleMeta.color }}
+                            >
+                              {card.action} <ChevronRight className="h-2.5 w-2.5" />
+                            </span>
                           )}
                         </div>
-                      );
-                    })}
-                  </div>
-                );
-              })}
-            </>
-          ) : (
-            /* ─────── ROLE JOURNEY VIEW (单角色视角) ─────── */
-            <div className="grid grid-cols-[150px_repeat(6,1fr)] border-b border-slate-100 dark:border-slate-800">
-              {/* Stage columns 1-6 for the selected role */}
-              {JOURNEY_STAGES.map((stage) => {
-                const myNodes = getNodesForCell(graphNodes, stage.id, selectedRole);
-                const isMyStage = currentRole!.activeStages.includes(stage.id);
-
-                // Other roles' nodes at this stage
-                const otherRoles = ROLES.filter((r) => r.id !== selectedRole);
-                const collaboratorNodes = otherRoles.flatMap((r) =>
-                  getNodesForCell(graphNodes, stage.id, r.id),
-                );
-
-                return (
-                  <div
-                    key={stage.id}
-                    className={`min-h-[160px] border-l border-slate-100 p-2.5 transition-all dark:border-slate-800 ${
-                      isMyStage
-                        ? "bg-white/60 dark:bg-slate-950/30"
-                        : "bg-slate-100/40 opacity-50 dark:bg-slate-900/20"
-                    }`}
-                  >
-                    {!isMyStage ? (
-                      <div className="flex h-full flex-col items-center justify-center gap-1 text-center">
-                        <span className="text-[10px] text-slate-300 dark:text-slate-600">——</span>
-                        <span className="text-[9px] text-slate-300 dark:text-slate-600">
-                          此阶段{currentRole!.label[locale]}不参与
-                        </span>
                       </div>
-                    ) : (
-                      <>
-                        {/* My cards section */}
-                        <div className="mb-0.5 text-[9px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-                          我的动作
-                        </div>
-                        {myNodes.length === 0 ? (
-                          <div className="text-[10px] italic text-slate-300 dark:text-slate-600">
-                            此阶段暂未收录
-                          </div>
-                        ) : (
-                          <div className="flex flex-wrap gap-1.5">
-                            {myNodes.map((node) => {
-                              const hl = classifyHighlight(node.id);
-                              return (
-                                <NodeCard
-                                  key={node.id}
-                                  node={node}
-                                  locale={locale}
-                                  highlight={hl}
-                                  roleColor={currentRole!.color}
-                                  graphNodes={graphNodes}
-                                  onClick={() => {
-                                    setSelectedNodeId(selectedNodeId === node.id ? null : node.id);
-                                    exitAiFocus();
-                                  }}
-                                  onHoverIn={() => setHoveredNodeId(node.id)}
-                                  onHoverOut={() => setHoveredNodeId(null)}
-                                />
-                              );
-                            })}
-                          </div>
-                        )}
-
-                        {/* Collaborator cards section */}
-                        {collaboratorNodes.length > 0 && (
-                          <>
-                            <div className="mb-0.5 mt-3 border-t border-slate-100 pt-2 text-[9px] font-bold uppercase tracking-wider text-slate-400 dark:border-slate-800 dark:text-slate-500">
-                              协作方
-                            </div>
-                            <div className="flex flex-wrap gap-1">
-                              {collaboratorNodes.map((node) => {
-                                const hl = classifyHighlight(node.id);
-                                const cRole = nodeRoleColor(node.id);
-                                return (
-                                  <NodeCard
-                                    key={node.id}
-                                    node={node}
-                                    locale={locale}
-                                    highlight={hl}
-                                    roleColor={cRole}
-                                    graphNodes={graphNodes}
-                                    onClick={() => {
-                                      setSelectedNodeId(selectedNodeId === node.id ? null : node.id);
-                                      exitAiFocus();
-                                    }}
-                                    onHoverIn={() => setHoveredNodeId(node.id)}
-                                    onHoverOut={() => setHoveredNodeId(null)}
-                                  />
-                                );
-                              })}
-                            </div>
-                          </>
-                        )}
-                      </>
-                    )}
+                    ))}
                   </div>
-                );
-              })}
-            </div>
-          )}
+
+                  {/* Next hint */}
+                  {stageContent?.nextHint && (
+                    <div className="mt-3 text-center text-[10px] italic text-slate-300 dark:text-slate-600">
+                      ↓ {stageContent.nextHint}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
 
           {/* ── Footer hint ── */}
           <div className="px-4 py-3">
             <span className="text-[10px] text-slate-400 dark:text-slate-500">
-              💡 顶部切换角色身份查看专属旅程 · 点击卡片查看关联 · 悬停看详情 · 底部 AI 导师规划路径
+              💡 切换上方身份查看不同角色的旅程和行动建议 · 底部 AI 导师按需规划个性化路径
             </span>
           </div>
         </div>
@@ -673,7 +562,7 @@ export default function ExplorePage() {
         apiPath="/api/v1/explore/chat"
         apiExtraBody={{ graph_context: graphContext }}
         onResponse={handleAIResponse}
-        quickQuestions={EXPLORE_QUICK_QUESTIONS}
+        quickQuestions={QUICK_QUESTIONS[selectedRole] || QUICK_QUESTIONS.buyer}
       />
     </div>
   );
