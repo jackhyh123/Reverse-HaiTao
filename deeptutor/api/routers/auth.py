@@ -11,6 +11,7 @@ Admin-protected dependencies are exposed as `require_admin` and `get_current_use
 
 from __future__ import annotations
 
+import os
 from typing import Any, Literal
 
 from fastapi import APIRouter, Cookie, Depends, HTTPException, Request, Response
@@ -98,6 +99,11 @@ def require_admin(user: UserInfo = Depends(get_current_user)) -> UserInfo:
 async def send_code(payload: SendCodePayload) -> dict[str, Any]:
     if not is_valid_email(payload.email):
         raise HTTPException(status_code=400, detail="invalid_email")
+
+    bypass_otp = os.environ.get("AUTH_BYPASS_OTP", "").strip().lower() in ("true", "1", "yes")
+    if bypass_otp:
+        return {"success": True, "message": "[跳过] 请输入任意6位数字验证码", "dev_mode": True}
+
     client = get_otp_client()
     ok, msg = client.send_code(payload.email)
     return {"success": ok, "message": msg, "dev_mode": getattr(client, "is_dev_mode", False)}
@@ -111,10 +117,14 @@ async def verify(
 ) -> dict[str, Any]:
     if not is_valid_email(payload.email):
         raise HTTPException(status_code=400, detail="invalid_email")
-    client = get_otp_client()
-    ok, msg = client.verify_code(payload.email, payload.code)
-    if not ok:
-        raise HTTPException(status_code=400, detail=msg)
+
+    # Allow bypassing OTP verification via env var (for dev/debug)
+    bypass_otp = os.environ.get("AUTH_BYPASS_OTP", "").strip().lower() in ("true", "1", "yes")
+    if not bypass_otp:
+        client = get_otp_client()
+        ok, msg = client.verify_code(payload.email, payload.code)
+        if not ok:
+            raise HTTPException(status_code=400, detail=msg)
 
     email = payload.email.lower().strip()
     role: Literal["admin", "member"] = "admin" if is_admin_email(email) else "member"

@@ -9,8 +9,10 @@ import {
   DatabaseZap,
   FileText,
   Loader2,
+  Plus,
   RefreshCcw,
   Sparkles,
+  Wand2,
 } from "lucide-react";
 import { apiUrl } from "@/lib/api";
 
@@ -73,6 +75,8 @@ export default function AdminKnowledgeSyncPage() {
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState("");
+  const [adoptedKeys, setAdoptedKeys] = useState<Set<string>>(new Set());
+  const [adopting, setAdopting] = useState<string | null>(null); // key being adopted, or "all"
 
   const report = status?.last_report || null;
   const createdPages = useMemo(
@@ -120,6 +124,66 @@ export default function AdminKnowledgeSyncPage() {
       setError(String(e));
     } finally {
       setSyncing(false);
+    }
+  };
+
+  const adoptOne = async (nodeId: string, url: string, title: string, section: string, pageTitle: string) => {
+    const key = `${nodeId}|${url}`;
+    setAdopting(key);
+    try {
+      const res = await fetch(apiUrl("/api/v1/knowledge-graph/adopt-resource"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          node_id: nodeId,
+          url,
+          title: { zh: title, en: title },
+          type: "feishu_doc",
+          section,
+          page_title: pageTitle,
+        }),
+      });
+      if (!res.ok) throw new Error((await res.text()) || `HTTP ${res.status}`);
+      setAdoptedKeys((prev) => new Set(prev).add(key));
+    } catch (e) {
+      setError(`采纳失败: ${e}`);
+    } finally {
+      setAdopting(null);
+    }
+  };
+
+  const adoptAll = async () => {
+    if (!report?.suggestions?.length) return;
+    setAdopting("all");
+    try {
+      const adoptions = report.suggestions.flatMap((item) =>
+        item.matches.map((m) => ({
+          node_id: m.node_id,
+          url: item.url,
+          title: { zh: item.page_title, en: item.page_title },
+          type: "feishu_doc" as const,
+          section: item.section,
+          page_title: item.page_title,
+        })),
+      );
+      const res = await fetch(apiUrl("/api/v1/knowledge-graph/adopt-resources-batch"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ adoptions }),
+      });
+      if (!res.ok) throw new Error((await res.text()) || `HTTP ${res.status}`);
+      const data = await res.json();
+      const keys = new Set(adoptedKeys);
+      for (const a of data.adopted || []) {
+        keys.add(`${a.node_id}|${a.resource.url}`);
+      }
+      setAdoptedKeys(keys);
+    } catch (e) {
+      setError(`批量采纳失败: ${e}`);
+    } finally {
+      setAdopting(null);
     }
   };
 
@@ -236,12 +300,28 @@ export default function AdminKnowledgeSyncPage() {
         </div>
 
         <div className="rounded-3xl border border-[var(--border)]/70 bg-[var(--background)] p-5 shadow-sm">
-          <div className="flex items-center gap-2">
-            <Sparkles className="h-5 w-5 text-amber-500" />
-            <h2 className="text-lg font-semibold">建议添加到知识图谱资源</h2>
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <Sparkles className="h-5 w-5 text-amber-500" />
+              <h2 className="text-lg font-semibold">建议添加到知识图谱资源</h2>
+            </div>
+            {report?.suggestions?.length ? (
+              <button
+                onClick={adoptAll}
+                disabled={adopting === "all"}
+                className="inline-flex items-center gap-1.5 rounded-xl bg-amber-500 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-amber-600 disabled:opacity-50 transition"
+              >
+                {adopting === "all" ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Wand2 className="h-3.5 w-3.5" />
+                )}
+                一键全部采纳
+              </button>
+            ) : null}
           </div>
           <p className="mt-1 text-sm text-[var(--muted-foreground)]">
-            系统根据页面标题、目录和知识图谱节点内容自动推荐。下一步可以继续做“一键采纳到节点资源”。
+            系统根据页面标题、目录和知识图谱节点内容自动推荐。点击「采纳」将文档加入对应节点的学习资源。
           </p>
           <div className="mt-4 space-y-4">
             {report?.suggestions?.length ? (
@@ -262,22 +342,54 @@ export default function AdminKnowledgeSyncPage() {
                     </span>
                   </div>
                   <div className="mt-3 space-y-2">
-                    {item.matches.map((match) => (
-                      <div
-                        key={`${item.page_title}-${match.node_id}`}
-                        className="rounded-xl bg-[var(--secondary)]/35 px-3 py-2 text-sm"
-                      >
-                        <div className="flex items-center justify-between gap-3">
-                          <span className="font-medium">{match.node_title}</span>
-                          <span className="text-xs text-[var(--muted-foreground)]">
-                            匹配度 {match.score}
-                          </span>
+                    {item.matches.map((match) => {
+                      const key = `${match.node_id}|${item.url}`;
+                      const isAdopted = adoptedKeys.has(key);
+                      const isThisAdopting = adopting === key;
+                      return (
+                        <div
+                          key={`${item.page_title}-${match.node_id}`}
+                          className="rounded-xl bg-[var(--secondary)]/35 px-3 py-2 text-sm"
+                        >
+                          <div className="flex items-center justify-between gap-3">
+                            <span className="font-medium">{match.node_title}</span>
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs text-[var(--muted-foreground)]">
+                                匹配度 {match.score}
+                              </span>
+                              <button
+                                onClick={() =>
+                                  adoptOne(match.node_id, item.url, item.page_title, item.section, item.page_title)
+                                }
+                                disabled={isAdopted || !!adopting}
+                                className={`inline-flex items-center gap-1 rounded-lg px-2 py-0.5 text-xs font-medium transition ${
+                                  isAdopted
+                                    ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300"
+                                    : "bg-[var(--primary)]/10 text-[var(--primary)] hover:bg-[var(--primary)]/20"
+                                } disabled:opacity-50`}
+                              >
+                                {isAdopted ? (
+                                  <>
+                                    <CheckCircle2 className="h-3 w-3" /> 已采纳
+                                  </>
+                                ) : isThisAdopting ? (
+                                  <>
+                                    <Loader2 className="h-3 w-3 animate-spin" /> 采纳中
+                                  </>
+                                ) : (
+                                  <>
+                                    <Plus className="h-3 w-3" /> 采纳
+                                  </>
+                                )}
+                              </button>
+                            </div>
+                          </div>
+                          <div className="mt-1 text-xs leading-5 text-[var(--muted-foreground)]">
+                            {match.reason}
+                          </div>
                         </div>
-                        <div className="mt-1 text-xs leading-5 text-[var(--muted-foreground)]">
-                          {match.reason}
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               ))

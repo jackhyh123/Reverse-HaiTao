@@ -17,6 +17,136 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "2026.05.01",
+    date: "2026-05-01",
+    label: {
+      zh: "学习系统重大升级",
+      en: "Learning System Major Upgrade",
+    },
+    headline: {
+      zh: "从「知识浏览器」升级为完整的「教 → 练 → 测 → 改」学习系统",
+      en: "Upgraded from a knowledge browser to a complete teach → practice → test → improve learning system.",
+    },
+    summary: {
+      zh: "这次更新是 /learn 页面从 0 到 1 的重构：每个节点新增实操任务，AI 导师能感知你浏览过的资料，资源支持内联阅读，新增学习笔记、里程碑通知、连续学习天数和成就徽章。",
+      en: "This update is a ground-up rebuild of the /learn page: every node now has a practical task, the AI tutor is aware of what you've read, resources open inline, and we've added study notes, milestone notifications, learning streaks, and achievement badges.",
+    },
+    highlights: [
+      {
+        title: {
+          zh: "每个节点都有「实操任务」了",
+          en: "Every node now has a practical task",
+        },
+        description: {
+          zh: "每个知识节点新增实操任务 tab：左侧是任务描述和评估标准，右侧是提交框。写好答案后点「提交评估」，AI 会给打分（0-100）、综合评语、做得好的地方、还需要改进的地方和下一步建议。答案和评估结果会自动保存，切换节点回来还在。",
+          en: "Each node now has a Practice tab with a task description, evaluation criteria, and a submission box. Submit your answer and the AI scores it (0-100), gives feedback, strengths, improvements, and a next step. Answers and results are auto-saved per node.",
+        },
+      },
+      {
+        title: {
+          zh: "顶部新增路线导引条",
+          en: "New roadmap guidance strip at the top",
+        },
+        description: {
+          zh: "首页顶栏现在显示「第 X/14 步」、进度百分比和下一步要学的节点名。全部通关后会显示「🎉 全部通关！」并展示你已获得的能力。",
+          en: "The top bar now shows your current step (X/14), progress percentage, and the next node to learn. When all nodes are mastered, it shows a celebration message and your acquired capabilities.",
+        },
+      },
+      {
+        title: {
+          zh: "AI 导师能知道你浏览过哪些资料",
+          en: "AI tutor is now aware of your reading history",
+        },
+        description: {
+          zh: "在节点详情里点击资料链接，AI 导师会记住你看过什么。聊天时导师会主动引用：「你之前看过的那篇《xxx》里提到…」，让教学更自然、更个性化。",
+          en: "When you click resource links in a node, the AI tutor remembers what you've read and can reference it during teaching: 'The article you read earlier mentioned...', making tutoring more natural and personalized.",
+        },
+      },
+      {
+        title: {
+          zh: "资料支持内联阅读，不跳转飞书",
+          en: "Resources now open inline instead of jumping to Feishu",
+        },
+        description: {
+          zh: "点击资料链接会在当前页面弹出阅读面板，直接显示文档内容，不再跳转到飞书。想在新标签打开可以 Ctrl+点击。阅读面板顶部有「在飞书中打开」的快捷链接。",
+          en: "Clicking a resource link now opens an inline reading panel with the document content, instead of jumping to Feishu. Ctrl+click still opens in a new tab. An 'Open in Feishu' shortcut is available in the panel header.",
+        },
+      },
+      {
+        title: {
+          zh: "新增学习笔记",
+          en: "Study notes are now available",
+        },
+        description: {
+          zh: "在 AI 导师聊天区上方可以展开「学习笔记」面板，随时记录思考、心得或疑问。笔记自动保存到本地，也可以 Ctrl+Enter 一键保存到云端。切换节点后笔记各自独立。",
+          en: "Above the AI tutor chat, you can expand the Study Notes panel to jot down thoughts, insights, or questions. Notes auto-save locally and can be saved to the cloud with Ctrl+Enter. Each node keeps its own notes.",
+        },
+      },
+      {
+        title: {
+          zh: "里程碑通知：基础通关 / 赛道通关 / 全栈达人",
+          en: "Milestone notifications for track completion",
+        },
+        description: {
+          zh: "当你完成 6 个基础节点、卖家赛道 10 节点、运营赛道 10 节点或全部 14 节点时，右上角会弹出里程碑 toast 通知。已关闭的里程碑不会重复弹出。",
+          en: "When you master all 6 foundation nodes, the full seller track (10 nodes), the full operator track (10 nodes), or all 14 nodes, a milestone toast appears at the top right. Dismissed milestones won't reappear.",
+        },
+      },
+      {
+        title: {
+          zh: "连续学习天数 + 成就徽章",
+          en: "Learning streak + achievement badges",
+        },
+        description: {
+          zh: "顶栏显示 🔥 连续学习天数，点击徽章按钮可以打开徽章墙。8 个成就徽章等你解锁：入门学徒、基础达人、卖家专家、运营专家、三日坚持、周冠军、笔记达人、全部通关。新解锁的徽章会有弹出动画。",
+          en: "The top bar shows your 🔥 learning streak, and clicking the badge button opens the badge wall. 8 achievements to unlock: Apprentice, Foundation Master, Seller Pro, Operator Pro, 3-Day Streak, Weekly Champion, Note Taker, and Completionist. New badges animate in.",
+        },
+      },
+    ],
+    details: [
+      {
+        title: {
+          zh: "实操任务评估由 AI 实时判定",
+          en: "Practical task evaluation is real-time AI-judged",
+        },
+        description: {
+          zh: "后端新增 evaluate-task API，LLM 会对照每个节点预设的评估标准逐条判断，给出 0-100 分和通过/未通过判定，不是简单的关键词匹配。",
+          en: "A new evaluate-task API uses the LLM to judge submissions against each node's preset evaluation criteria, producing a 0-100 score and pass/fail verdict — not just keyword matching.",
+        },
+      },
+      {
+        title: {
+          zh: "资源阅读追踪通过 localStorage 实现",
+          en: "Resource reading tracking uses localStorage",
+        },
+        description: {
+          zh: "浏览记录保存在浏览器本地，不上传服务器。AI 导师只在你主动打开导师聊天时才会感知到浏览记录，用作教学引用的上下文。",
+          en: "Reading history is stored locally in the browser and not uploaded to the server. The AI tutor only sees it when you actively open a tutor conversation, using it as teaching context.",
+        },
+      },
+      {
+        title: {
+          zh: "学习数据全部本地优先",
+          en: "All learning data is local-first",
+        },
+        description: {
+          zh: "笔记、浏览记录、阅读进度、连续天数、徽章等数据优先保存在浏览器 localStorage 中。笔记支持手动「保存到云端」，用于跨设备同步。",
+          en: "Notes, reading history, reading progress, streaks, and badges are all stored locally in localStorage first. Notes can be manually saved to the cloud for cross-device sync.",
+        },
+      },
+      {
+        title: {
+          zh: "内联阅读仅支持飞书文档",
+          en: "Inline reading only supports Feishu documents",
+        },
+        description: {
+          zh: "出于安全考虑，内联阅读代理只允许抓取飞书域名（*.feishu.cn）的页面，文本截断至 8000 字符，带 15 秒超时保护。",
+          en: "For security, the inline reading proxy only allows fetching from Feishu domains (*.feishu.cn), truncates content to 8,000 characters, and has a 15-second timeout.",
+        },
+      },
+    ],
+  },
+  {
     version: "2026.04.29",
     date: "2026-04-29",
     label: {

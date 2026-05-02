@@ -50,6 +50,8 @@ interface MapNodeData {
   trackColor: string;
   kind: NodeKind;
   tags: string[];
+  nodeWidth?: number;
+  nodeHeight?: number;
 }
 
 const NODE_W = 330;
@@ -142,7 +144,7 @@ function MapNodeView({ data }: NodeProps<MapNodeData>) {
   return (
     <div
       className={`${statusClass} ${selectedRing} group relative rounded-[28px] border-2 px-5 py-4 transition-all duration-300 hover:-translate-y-1`}
-      style={{ width: NODE_W, minHeight: NODE_H }}
+      style={{ width: data.nodeWidth ?? NODE_W, minHeight: data.nodeHeight ?? NODE_H }}
     >
       {(data.selected || data.previewed) && (
         <span
@@ -212,10 +214,10 @@ function MapNodeView({ data }: NodeProps<MapNodeData>) {
 
 const NODE_TYPES = { graph: MapNodeView };
 
-function layoutGraph(nodes: Node[]) {
+function layoutGraph(nodes: Node[], nodeW: number, nodeH: number, nodeGap: number) {
   return nodes.map((node, index) => ({
     ...node,
-    position: { x: -NODE_W / 2, y: index * (NODE_H + NODE_GAP) },
+    position: { x: -nodeW / 2, y: index * (nodeH + nodeGap) },
     sourcePosition: Position.Bottom,
     targetPosition: Position.Top,
   }));
@@ -229,6 +231,7 @@ interface KnowledgeMapFlowProps {
   focusNodeId?: string | null;
   focusVersion?: number;
   openOnSingleTap?: boolean;
+  compact?: boolean;
   onPreviewNode?: (node: GraphNode) => void;
   onSelectNode: (node: GraphNode) => void;
   locale: LocaleKey;
@@ -242,10 +245,14 @@ function FlowInner({
   focusNodeId = null,
   focusVersion = 0,
   openOnSingleTap = false,
+  compact = false,
   onPreviewNode,
   onSelectNode,
   locale,
 }: KnowledgeMapFlowProps) {
+  const nodeW = compact ? 260 : 330;
+  const nodeH = compact ? 138 : 154;
+  const nodeGap = compact ? 80 : 112;
   const trackColor = useMemo(
     () => graph.tracks.find((t) => t.id === trackId)?.color || "#1a73e8",
     [graph, trackId],
@@ -280,6 +287,8 @@ function FlowInner({
           trackColor,
           kind: classifyNode(n.tags || []),
           tags: n.tags || [],
+          nodeWidth: nodeW,
+          nodeHeight: nodeH,
         } as MapNodeData,
       })),
     [trackNodes, locale, masteredIds, selectedNodeId, previewNodeId, focusVersion, trackColor],
@@ -319,7 +328,7 @@ function FlowInner({
     [trackNodes, nodeIdSet, masteredIds, trackColor],
   );
 
-  const laidOut = useMemo(() => layoutGraph(baseNodes), [baseNodes]);
+  const laidOut = useMemo(() => layoutGraph(baseNodes, nodeW, nodeH, nodeGap), [baseNodes, nodeW, nodeH, nodeGap]);
 
   const [nodes, setNodes, onNodesChange] = useNodesState(laidOut);
   const [edges, setEdges, onEdgesChange] = useEdgesState(baseEdges);
@@ -329,8 +338,8 @@ function FlowInner({
     if (!nodeId) return;
     const focus = laidOut.find((n) => n.id === nodeId);
     if (!focus) return;
-    const cx = (focus.position?.x ?? 0) + NODE_W / 2;
-    const cy = (focus.position?.y ?? 0) + NODE_H / 2;
+    const cx = (focus.position?.x ?? 0) + nodeW / 2;
+    const cy = (focus.position?.y ?? 0) + nodeH / 2;
     void fitView({
       nodes: [{ id: nodeId }],
       padding: 0.48,

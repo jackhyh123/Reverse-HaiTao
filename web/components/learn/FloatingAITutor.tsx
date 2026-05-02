@@ -21,6 +21,16 @@ interface FloatingAITutorProps {
   isLoggedIn: boolean;
   /** 节点详情抽屉打开时暂时安静下来，避免盖住学习内容 */
   disabled?: boolean;
+  /** 自定义 API 路径（默认 /api/v1/knowledge-graph/ask） */
+  apiPath?: string;
+  /** API 请求额外的 body 字段（如 graph_context） */
+  apiExtraBody?: Record<string, unknown>;
+  /** 每次收到 AI 回复时回调，传入完整 response JSON */
+  onResponse?: (data: Record<string, unknown>) => void;
+  /** 自定义快捷问题（覆盖默认） */
+  quickQuestions?: string[];
+  /** rightOffsetPx > 0 时是否禁用 AI 导师（默认 true，/explore 传 false） */
+  disableWhenOffset?: boolean;
 }
 
 interface ChatMsg {
@@ -28,7 +38,7 @@ interface ChatMsg {
   content: string;
 }
 
-const QUICK_QUESTIONS = [
+const DEFAULT_QUICK_QUESTIONS = [
   "反淘和普通跨境电商最大的区别是什么？",
   "新手卖家应该从哪条路径开始？",
   "Reddit 和 Discord 哪个更值得投入？",
@@ -43,6 +53,11 @@ export default function FloatingAITutor({
   leftOffsetPx = 0,
   isLoggedIn,
   disabled = false,
+  apiPath,
+  apiExtraBody,
+  onResponse,
+  quickQuestions,
+  disableWhenOffset = true,
 }: FloatingAITutorProps) {
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState("");
@@ -52,7 +67,7 @@ export default function FloatingAITutor({
   const inputRef = useRef<HTMLInputElement | null>(null);
 
   // 详情面板打开时禁用 AI 长条（避免抢注意力）
-  const panelDisabled = disabled || rightOffsetPx > 0;
+  const panelDisabled = disabled || (disableWhenOffset && rightOffsetPx > 0);
   // 公测期先放开 AI 体验；登录只用于长期保存个人学习进度。
   const authRequired = !PUBLIC_BETA_AI_OPEN && !isLoggedIn;
 
@@ -109,22 +124,26 @@ export default function FloatingAITutor({
     setInput("");
     setSending(true);
     try {
-      const r = await fetch(apiUrl("/api/v1/knowledge-graph/ask"), {
+      const endpoint = apiPath || "/api/v1/knowledge-graph/ask";
+      const body: Record<string, unknown> = {
+        messages: next.map(({ role, content }) => ({ role, content })),
+        ...(apiExtraBody || {}),
+      };
+      const r = await fetch(apiUrl(endpoint), {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          messages: next.map(({ role, content }) => ({ role, content })),
-        }),
+        body: JSON.stringify(body),
       });
-      const data = (await r.json()) as { reply?: string; detail?: string };
+      const data = (await r.json()) as Record<string, unknown>;
       setMessages((prev) => [
         ...prev,
         {
           role: "assistant",
-          content: data.reply || `出错了：${data.detail || "未知错误"}`,
+          content: (data.reply as string) || `出错了：${data.detail || "未知错误"}`,
         },
       ]);
+      if (onResponse) onResponse(data);
     } catch (e) {
       setMessages((prev) => [
         ...prev,
@@ -194,7 +213,7 @@ export default function FloatingAITutor({
                   试试这些问题
                 </div>
                 <div className="flex flex-wrap gap-1.5">
-                  {QUICK_QUESTIONS.map((q) => (
+                  {(quickQuestions || DEFAULT_QUICK_QUESTIONS).map((q) => (
                     <button
                       key={q}
                       onClick={() => void ask(q)}

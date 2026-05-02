@@ -1,13 +1,16 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BookOpen, ExternalLink, FileText, FolderOpen, Loader2, RotateCcw, Sparkles } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "@/context/AuthContext";
 import { useAppShell } from "@/context/AppShellContext";
 import FloatingAITutor from "@/components/learn/FloatingAITutor";
+import InlineResourceReader from "@/components/learn/InlineResourceReader";
 import KnowledgeMapFlow from "@/components/learn/KnowledgeMapFlow";
 import NodeDetailPanel from "@/components/learn/NodeDetailPanel";
+import { detectMilestones, MilestoneToast, type MilestoneDef } from "@/components/learn/MilestoneNotification";
+import AchievementBadges from "@/components/learn/AchievementBadges";
 import {
   type GraphNode,
   type KnowledgeGraph,
@@ -16,6 +19,7 @@ import {
   fetchMyProgress,
   resetProgress,
 } from "@/lib/knowledge-graph";
+import { updateStreak } from "@/lib/learning-streak";
 
 type LocaleKey = "zh" | "en";
 
@@ -28,6 +32,7 @@ export default function LearnPage() {
 
   const [graph, setGraph] = useState<KnowledgeGraph | null>(null);
   const [masteredIds, setMasteredIds] = useState<Set<string>>(new Set());
+  const [notesByNodeId, setNotesByNodeId] = useState<Map<string, string>>(new Map());
   const [trackId, setTrackId] = useState<string>("seller");
   const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null);
   const [previewNode, setPreviewNode] = useState<GraphNode | null>(null);
@@ -37,6 +42,65 @@ export default function LearnPage() {
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [pendingMilestones, setPendingMilestones] = useState<MilestoneDef[]>([]);
+  const [streak, setStreak] = useState(0);
+  const [readerUrl, setReaderUrl] = useState<string | null>(null);
+  const [readerTitle, setReaderTitle] = useState("");
+  const [readerNodeId, setReaderNodeId] = useState("");
+  const [readerStack, setReaderStack] = useState<
+    { url: string; title: string; nodeId: string }[]
+  >([]);
+  // Refs for latest reader state (avoids stale closure in navigation callbacks)
+  const readerUrlRef = useRef(readerUrl);
+  const readerTitleRef = useRef(readerTitle);
+  const readerNodeIdRef = useRef(readerNodeId);
+  readerUrlRef.current = readerUrl;
+  readerTitleRef.current = readerTitle;
+  readerNodeIdRef.current = readerNodeId;
+
+  // P4.2: Drawer fullscreen with drag-down-to-close (mobile)
+  const [drawerDragY, setDrawerDragY] = useState(0);
+  const [drawerDragging, setDrawerDragging] = useState(false);
+  const drawerTouchStartRef = useRef(0);
+  const drawerDragYRef = useRef(0);
+  const drawerDraggingRef = useRef(false);
+
+  const onDrawerTouchStart = useCallback((e: React.TouchEvent) => {
+    drawerTouchStartRef.current = e.touches[0].clientY;
+    drawerDraggingRef.current = true;
+    setDrawerDragging(true);
+    setDrawerDragY(0);
+    drawerDragYRef.current = 0;
+  }, []);
+
+  const onDrawerTouchMove = useCallback((e: React.TouchEvent) => {
+    if (!drawerDraggingRef.current) return;
+    const delta = e.touches[0].clientY - drawerTouchStartRef.current;
+    // Only allow dragging down, not up
+    drawerDragYRef.current = Math.max(0, delta);
+    setDrawerDragY(Math.max(0, delta));
+  }, []);
+
+  const onDrawerTouchEnd = useCallback(() => {
+    drawerDraggingRef.current = false;
+    setDrawerDragging(false);
+    const delta = drawerDragYRef.current;
+    setDrawerDragY(0);
+    drawerDragYRef.current = 0;
+
+    if (delta > 100) {
+      // Swiped down significantly → close drawer
+      setSelectedNode(null);
+      setPreviewNode(null);
+    }
+    // Otherwise snap back
+  }, []);
+
+  // Reset drawer drag state when node changes
+  useEffect(() => {
+    setDrawerDragY(0);
+    setDrawerDragging(false);
+  }, [selectedNode?.id]);
 
   const reload = useCallback(async () => {
     setLoading(true);
@@ -46,10 +110,34 @@ export default function LearnPage() {
       setGraph(g);
       setLoading(false);
       const p = await fetchMyProgress().catch(() => ({
-        progress: [],
-        mastered_node_ids: [],
+        progress: [] as any[],
+        mastered_node_ids: [] as string[],
       }));
       setMasteredIds(new Set(p.mastered_node_ids));
+      const notesMap = new Map<string, string>();
+      for (const row of p.progress) {
+        if (row.notes) notesMap.set(row.node_id, row.notes);
+      }
+      setNotesByNodeId(notesMap);
+
+      // Detect milestones
+      const foundationIds = g.nodes
+        .filter((n) => n.track_ids.length >= 2)
+        .map((n) => n.id);
+      const sellerIds = g.nodes
+        .filter((n) => n.track_ids.includes("seller"))
+        .map((n) => n.id);
+      const operatorIds = g.nodes
+        .filter((n) => n.track_ids.includes("operator"))
+        .map((n) => n.id);
+      const allIds = g.nodes.map((n) => n.id);
+      const newMilestones = detectMilestones(
+        foundationIds, sellerIds, operatorIds, allIds,
+        new Set(p.mastered_node_ids),
+      );
+      if (newMilestones.length > 0) {
+        setPendingMilestones(newMilestones);
+      }
     } catch (e) {
       setError(String(e));
       setLoading(false);
@@ -58,6 +146,9 @@ export default function LearnPage() {
 
   useEffect(() => {
     const timer = window.setTimeout(() => void reload(), 0);
+    // Update streak
+    const data = updateStreak();
+    setStreak(data.currentStreak);
     return () => window.clearTimeout(timer);
   }, [reload]);
 
@@ -70,6 +161,21 @@ export default function LearnPage() {
     () => trackNodes.filter((n) => masteredIds.has(n.id)).length,
     [trackNodes, masteredIds],
   );
+
+  const badgeConditions = useMemo(() => {
+    if (!graph) return { foundationMastered: false, sellerTrackMastered: false, operatorTrackMastered: false, allMastered: false, notesNodeCount: 0 };
+    const allIds = graph.nodes.map((n) => n.id);
+    const foundationIds = graph.nodes.filter((n) => n.track_ids.length >= 2).map((n) => n.id);
+    const sellerIds = graph.nodes.filter((n) => n.track_ids.includes("seller")).map((n) => n.id);
+    const operatorIds = graph.nodes.filter((n) => n.track_ids.includes("operator")).map((n) => n.id);
+    return {
+      foundationMastered: foundationIds.every((id) => masteredIds.has(id)),
+      sellerTrackMastered: sellerIds.every((id) => masteredIds.has(id)),
+      operatorTrackMastered: operatorIds.every((id) => masteredIds.has(id)),
+      allMastered: allIds.every((id) => masteredIds.has(id)),
+      notesNodeCount: Array.from(notesByNodeId.values()).filter((n) => n && n.trim()).length,
+    };
+  }, [graph, masteredIds, notesByNodeId]);
 
   const resourceDesktop = useMemo(() => {
     if (!graph) return { left: [], right: [] };
@@ -109,6 +215,54 @@ export default function LearnPage() {
     requestNodeFocus(next.id);
   };
 
+  const handleOpenResource = useCallback((url: string, title: string) => {
+    // Find which node this resource belongs to
+    const owner = graph?.nodes.find((n) =>
+      (n.resources || []).some((r) => r.url === url),
+    );
+    setReaderNodeId(owner?.id || "");
+    setReaderUrl(url);
+    setReaderTitle(title);
+    setReaderStack([]); // Clear navigation stack on new resource open
+  }, [graph]);
+
+  const handleNavigateToLinkedDoc = useCallback(
+    (url: string, title: string, nodeId: string) => {
+      const currentUrl = readerUrlRef.current;
+      if (currentUrl) {
+        setReaderStack((prev) => [
+          ...prev,
+          {
+            url: currentUrl,
+            title: readerTitleRef.current,
+            nodeId: readerNodeIdRef.current,
+          },
+        ]);
+      }
+      setReaderUrl(url);
+      setReaderTitle(title);
+      setReaderNodeId(nodeId);
+    },
+    [],
+  );
+
+  const handleBreadcrumbClick = useCallback(
+    (index: number) => {
+      let target: { url: string; title: string; nodeId: string } | undefined;
+      setReaderStack((prev) => {
+        if (index < 0 || index >= prev.length) return prev;
+        target = prev[index];
+        return prev.slice(0, index);
+      });
+      if (target) {
+        setReaderUrl(target.url);
+        setReaderTitle(target.title);
+        setReaderNodeId(target.nodeId);
+      }
+    },
+    [],
+  );
+
   const handleReset = async () => {
     if (!user) return;
     if (!confirm(t("learn.confirmReset"))) return;
@@ -140,9 +294,23 @@ export default function LearnPage() {
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-1.5 text-[11px] text-[var(--muted-foreground)] md:gap-2 md:text-xs">
+            {streak > 0 && user && (
+              <span className="hidden md:inline">🔥 {streak} 天</span>
+            )}
             <span>
               {user ? `${masteredCount}/${trackNodes.length} 已掌握` : "公测中"}
             </span>
+            {graph && user && (
+              <AchievementBadges
+                locale={locale}
+                masteredCount={masteredCount}
+                foundationMastered={badgeConditions.foundationMastered}
+                sellerTrackMastered={badgeConditions.sellerTrackMastered}
+                operatorTrackMastered={badgeConditions.operatorTrackMastered}
+                allMastered={badgeConditions.allMastered}
+                notesNodeCount={badgeConditions.notesNodeCount}
+              />
+            )}
             {user && (
               <button
                 onClick={handleReset}
@@ -181,11 +349,23 @@ export default function LearnPage() {
         </div>
       )}
 
+      {/* Compact progress card (mobile only, above the map) */}
+      {!selectedNode && (
+        <MobileProgressCard
+          trackNodes={trackNodes}
+          masteredIds={masteredIds}
+          masteredCount={masteredCount}
+          trackColor={graph.tracks.find((t) => t.id === trackId)?.color || "#1a73e8"}
+        />
+      )}
+
       {/* Welcome strip: track cards + progress + resources (only when no node selected) */}
       {!selectedNode && (
         <WelcomeStrip
           graph={graph}
           trackId={trackId}
+          trackNodes={trackNodes}
+          masteredIds={masteredIds}
           masteredCount={masteredCount}
           totalCount={trackNodes.length}
           locale={locale}
@@ -213,6 +393,7 @@ export default function LearnPage() {
             focusNodeId={focusRequest.nodeId}
             focusVersion={focusRequest.nonce}
             openOnSingleTap={isMobile}
+            compact={isMobile}
             onPreviewNode={(node) => setPreviewNode(node)}
             onSelectNode={(node) => {
               setPreviewNode(node);
@@ -235,63 +416,106 @@ export default function LearnPage() {
             />
           )}
           {!selectedNode && (
-            <>
-              <ResourceDesktop
-                locale={locale}
-                leftResources={resourceDesktop.left}
-                rightResources={resourceDesktop.right}
-                rightTitle={
-                  previewNode?.track_ids.includes(trackId)
-                    ? previewNode.title[locale]
-                    : undefined
-                }
-              />
-              <ResourceMobileThumbs
-                locale={locale}
-                resources={uniqueResources([
-                  ...resourceDesktop.left,
-                  ...resourceDesktop.right,
-                ]).slice(0, 5)}
-              />
-            </>
+            <ResourceDesktop
+              locale={locale}
+              leftResources={resourceDesktop.left}
+              rightResources={resourceDesktop.right}
+              rightTitle={
+                previewNode?.track_ids.includes(trackId)
+                  ? previewNode.title[locale]
+                  : undefined
+              }
+              onOpenResource={handleOpenResource}
+            />
           )}
         </div>
 
         {/* Detail panel */}
         {selectedNode && (
-          <div className="fixed inset-x-0 bottom-0 z-50 flex h-[82dvh] flex-col overflow-hidden rounded-t-[28px] border-t border-[var(--border)]/60 bg-[var(--background)] shadow-[0_-24px_80px_rgba(15,23,42,0.22)] md:static md:h-auto md:w-[480px] md:shrink-0 md:rounded-none md:border-l md:border-t-0 md:shadow-none">
-            <NodeMiniStrip
-              nodes={trackNodes}
-              selectedNodeId={selectedNode.id}
-              masteredIds={masteredIds}
-              locale={locale}
-              onSelect={(node) => {
-                setPreviewNode(node);
-                setSelectedNode(node);
-                requestNodeFocus(node.id);
-              }}
-            />
+          <div
+            className="fixed inset-x-0 bottom-0 z-50 flex flex-col overflow-hidden rounded-t-[28px] border-t border-[var(--border)]/60 bg-[var(--background)] shadow-[0_-24px_80px_rgba(15,23,42,0.22)] md:static md:h-auto md:w-[480px] md:shrink-0 md:rounded-none md:border-l md:border-t-0 md:shadow-none"
+            style={{
+              height: "92dvh",
+              transform: drawerDragY ? `translateY(${Math.max(0, drawerDragY)}px)` : undefined,
+              transition: drawerDragging ? "none" : "height 0.3s ease, transform 0.3s ease",
+            }}
+          >
+            {/* Drag handle (mobile only) */}
+            <div
+              className="flex shrink-0 justify-center py-2 md:hidden"
+              onTouchStart={onDrawerTouchStart}
+              onTouchMove={onDrawerTouchMove}
+              onTouchEnd={onDrawerTouchEnd}
+            >
+              <div className="h-1 w-10 rounded-full bg-[var(--border)]" />
+            </div>
+
             <NodeDetailPanel
               node={selectedNode}
               locale={locale}
               isMastered={masteredIds.has(selectedNode.id)}
               isLoggedIn={!!user}
+              initialNotes={notesByNodeId.get(selectedNode.id) || ""}
               onClose={() => setSelectedNode(null)}
               onMarkMastered={handleMarkMastered}
               onSelectNodeById={handleSelectNodeById}
+              onPrevNode={() => {
+                  const idx = trackNodes.findIndex((n) => n.id === selectedNode.id);
+                  const prev = idx > 0 ? trackNodes[idx - 1] : null;
+                  if (prev) handleSelectNodeById(prev.id);
+                }}
+              onNextNode={() => {
+                  const idx = trackNodes.findIndex((n) => n.id === selectedNode.id);
+                  const next = idx < trackNodes.length - 1 ? trackNodes[idx + 1] : null;
+                  if (next) handleSelectNodeById(next.id);
+                }}
+              hasPrev={
+                trackNodes.findIndex((n) => n.id === selectedNode.id) > 0
+              }
+              hasNext={
+                trackNodes.findIndex((n) => n.id === selectedNode.id) < trackNodes.length - 1
+              }
             />
           </div>
         )}
       </div>
 
-      {/* 固定的 AI 导师长条（节点详情面板打开时让出右侧 480px） */}
-      <FloatingAITutor
-        trackLabel={graph.tracks.find((tr) => tr.id === trackId)?.label[locale]}
-        leftOffsetPx={isMobile ? 0 : sidebarCollapsed ? 60 : 220}
-        rightOffsetPx={isMobile ? 0 : selectedNode ? 480 : 0}
-        isLoggedIn={!!user}
-        disabled={!!selectedNode}
-      />
+      {/* Inline resource reader */}
+      {readerUrl && (
+        <InlineResourceReader
+          nodeId={readerNodeId}
+          url={readerUrl}
+          title={readerTitle}
+          locale={locale}
+          onClose={() => { setReaderUrl(null); setReaderTitle(""); setReaderNodeId(""); setReaderStack([]); }}
+          onNavigate={handleNavigateToLinkedDoc}
+          breadcrumbStack={readerStack}
+          onBreadcrumbClick={handleBreadcrumbClick}
+        />
+      )}
+
+      {/* Milestone toasts */}
+      {pendingMilestones.map((ms) => (
+        <MilestoneToast
+          key={ms.id}
+          milestone={ms}
+          locale={locale}
+          onDismiss={() =>
+            setPendingMilestones((prev) => prev.filter((m) => m.id !== ms.id))
+          }
+        />
+      ))}
+
+      {/* 固定的 AI 导师长条（移动端抽屉打开时隐藏，桌面端让出右侧面板） */}
+      {!(isMobile && selectedNode) && (
+        <FloatingAITutor
+          trackLabel={graph.tracks.find((tr) => tr.id === trackId)?.label[locale]}
+          leftOffsetPx={isMobile ? 0 : sidebarCollapsed ? 60 : 220}
+          rightOffsetPx={isMobile ? 0 : selectedNode ? 480 : 0}
+          isLoggedIn={!!user}
+          disabled={!!selectedNode}
+        />
+      )}
     </div>
   );
 }
@@ -439,6 +663,8 @@ const RECOMMENDED_RESOURCES = [
 function WelcomeStrip({
   graph,
   trackId,
+  trackNodes,
+  masteredIds,
   masteredCount,
   totalCount,
   locale,
@@ -446,6 +672,8 @@ function WelcomeStrip({
 }: {
   graph: KnowledgeGraph;
   trackId: string;
+  trackNodes: GraphNode[];
+  masteredIds: Set<string>;
   masteredCount: number;
   totalCount: number;
   locale: LocaleKey;
@@ -453,13 +681,23 @@ function WelcomeStrip({
 }) {
   const pct = totalCount === 0 ? 0 : Math.round((masteredCount / totalCount) * 100);
   const trackColor = graph.tracks.find((t) => t.id === trackId)?.color || "#1a73e8";
+  const desc = TRACK_DESCRIPTIONS[trackId];
+
+  // Find current step: first unlocked-but-not-mastered node
+  const currentStepIndex = trackNodes.findIndex(
+    (n) => !masteredIds.has(n.id) && n.prerequisites.every((p) => masteredIds.has(p))
+  );
+  const currentStep = currentStepIndex >= 0 ? currentStepIndex + 1 : totalCount;
+  const nextNode = currentStepIndex >= 0 ? trackNodes[currentStepIndex] : null;
+  const allMastered = masteredCount >= totalCount && totalCount > 0;
+
   return (
     <div className="hidden border-b border-[var(--border)]/40 bg-[var(--secondary)]/15 px-5 py-2 md:block">
       <div className="flex items-center gap-3">
         {/* 双轨道选择卡——单行紧凑 */}
         <div className="flex flex-1 gap-2 min-w-0">
           {graph.tracks.map((tr) => {
-            const desc = TRACK_DESCRIPTIONS[tr.id];
+            const td = TRACK_DESCRIPTIONS[tr.id];
             const active = tr.id === trackId;
             return (
               <button
@@ -476,9 +714,9 @@ function WelcomeStrip({
                   style={{ backgroundColor: tr.color }}
                 />
                 <span className="text-xs font-semibold whitespace-nowrap">{tr.label[locale]}</span>
-                {desc && (
+                {td && (
                   <span className="truncate text-[11px] text-[var(--muted-foreground)]">
-                    {desc.tagline[locale]}
+                    {td.tagline[locale]}
                   </span>
                 )}
               </button>
@@ -486,12 +724,27 @@ function WelcomeStrip({
           })}
         </div>
 
-        {/* 进度——内联 */}
-        <div className="hidden md:flex items-center gap-2 shrink-0 rounded-xl border border-[var(--border)]/40 bg-[var(--background)] px-3 py-1.5">
-          <Sparkles className="h-3 w-3 text-[var(--primary)]" />
-          <div className="flex flex-col">
+        {/* 路线图导引 */}
+        <div className="hidden md:flex items-center gap-2 shrink-0 rounded-xl border border-[var(--border)]/40 bg-[var(--background)] px-3 py-1.5 min-w-0 max-w-xs">
+          <Sparkles className="h-3 w-3 shrink-0 text-[var(--primary)]" />
+          <div className="flex flex-col min-w-0">
             <div className="flex items-baseline gap-1.5 text-[11px]">
-              <span className="font-semibold">{t_progress(masteredCount, totalCount, pct)}</span>
+              {allMastered ? (
+                <span className="font-semibold text-emerald-600">
+                  {locale === "zh" ? "🎉 全部通关！" : "🎉 All mastered!"}
+                </span>
+              ) : (
+                <>
+                  <span className="font-semibold whitespace-nowrap">
+                    {locale === "zh"
+                      ? `第 ${currentStep}/${totalCount} 步`
+                      : `Step ${currentStep}/${totalCount}`}
+                  </span>
+                  <span className="text-[var(--muted-foreground)]">
+                    {t_progress(masteredCount, totalCount, pct)}
+                  </span>
+                </>
+              )}
             </div>
             <div className="mt-0.5 h-1 w-24 overflow-hidden rounded-full bg-[var(--secondary)]/50">
               <div
@@ -499,6 +752,19 @@ function WelcomeStrip({
                 style={{ width: `${pct}%`, backgroundColor: trackColor }}
               />
             </div>
+            {nextNode && (
+              <div className="mt-0.5 truncate text-[10px] text-[var(--muted-foreground)] leading-4">
+                {locale === "zh" ? "下一步：" : "Next: "}
+                <span className="font-medium text-[var(--foreground)]">
+                  {nextNode.title[locale]}
+                </span>
+              </div>
+            )}
+            {allMastered && desc && (
+              <div className="mt-0.5 truncate text-[10px] text-[var(--muted-foreground)] leading-4">
+                {desc.outcome[locale]}
+              </div>
+            )}
           </div>
         </div>
 
@@ -538,6 +804,68 @@ function t_progress(done: number, total: number, pct: number): string {
   return `${done}/${total} · ${pct}%`;
 }
 
+function MobileProgressCard({
+  trackNodes,
+  masteredIds,
+  masteredCount,
+  trackColor,
+}: {
+  trackNodes: GraphNode[];
+  masteredIds: Set<string>;
+  masteredCount: number;
+  trackColor: string;
+}) {
+  const totalCount = trackNodes.length;
+  const pct = totalCount === 0 ? 0 : Math.round((masteredCount / totalCount) * 100);
+
+  // Find current step: first unlocked-but-not-mastered node
+  const currentStepIndex = trackNodes.findIndex(
+    (n) => !masteredIds.has(n.id) && n.prerequisites.every((p) => masteredIds.has(p)),
+  );
+  const currentStep = currentStepIndex >= 0 ? currentStepIndex + 1 : totalCount;
+  const allMastered = masteredCount >= totalCount && totalCount > 0;
+
+  return (
+    <div className="shrink-0 border-b border-[var(--border)]/40 bg-[var(--secondary)]/10 px-4 py-2 md:hidden">
+      <div className="flex items-center gap-3">
+        {/* Step indicator */}
+        <div className="flex items-baseline gap-1.5 min-w-0">
+          {allMastered ? (
+            <span className="text-xs font-bold text-emerald-600">🎉 全部通关</span>
+          ) : (
+            <>
+              <span className="text-sm font-black whitespace-nowrap">
+                第 {currentStep}/{totalCount} 步
+              </span>
+              <span className="text-xs text-[var(--muted-foreground)]">
+                · {pct}%
+              </span>
+            </>
+          )}
+        </div>
+
+        {/* Progress bar */}
+        <div className="flex-1 h-1.5 overflow-hidden rounded-full bg-[var(--secondary)]/60">
+          <div
+            className="h-full rounded-full transition-all duration-500"
+            style={{ width: `${pct}%`, backgroundColor: trackColor }}
+          />
+        </div>
+
+        {/* Badge */}
+        <span className="shrink-0 text-xs font-semibold text-[var(--muted-foreground)]">
+          {masteredCount}/{totalCount}
+        </span>
+      </div>
+      {!allMastered && currentStepIndex >= 0 && (
+        <div className="mt-1 truncate text-[11px] text-[var(--muted-foreground)]">
+          下一步：<span className="font-medium text-[var(--foreground)]">{trackNodes[currentStepIndex]?.title?.zh || ""}</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function uniqueResources(resources: NodeResource[]): NodeResource[] {
   const seen = new Set<string>();
   return resources.filter((resource) => {
@@ -553,11 +881,13 @@ function ResourceDesktop({
   leftResources,
   rightResources,
   rightTitle,
+  onOpenResource,
 }: {
   locale: LocaleKey;
   leftResources: NodeResource[];
   rightResources: NodeResource[];
   rightTitle?: string;
+  onOpenResource?: (url: string, title: string) => void;
 }) {
   return (
     <div className="pointer-events-none absolute inset-x-4 top-8 z-10 hidden justify-between gap-4 md:flex">
@@ -567,6 +897,7 @@ function ResourceDesktop({
         subtitle={locale === "zh" ? "先校准概念，再进入节点" : "Calibrate the basics before nodes"}
         resources={leftResources}
         align="left"
+        onOpenResource={onOpenResource}
       />
       <ResourceStack
         locale={locale}
@@ -574,6 +905,7 @@ function ResourceDesktop({
         subtitle={rightTitle ? (locale === "zh" ? "当前节点的资料" : "Current node files") : (locale === "zh" ? "点击节点后切换资料" : "Click a node to switch files")}
         resources={rightResources}
         align="right"
+        onOpenResource={onOpenResource}
       />
     </div>
   );
@@ -585,12 +917,14 @@ function ResourceStack({
   subtitle,
   resources,
   align,
+  onOpenResource,
 }: {
   locale: LocaleKey;
   title: string;
   subtitle: string;
   resources: NodeResource[];
   align: "left" | "right";
+  onOpenResource?: (url: string, title: string) => void;
 }) {
   if (resources.length === 0) return null;
   return (
@@ -610,12 +944,10 @@ function ResourceStack({
       </div>
       <div className="space-y-2">
         {resources.map((resource, index) => (
-          <a
+          <button
             key={`${resource.url}-${resource.title[locale]}`}
-            href={resource.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="group block"
+            onClick={() => onOpenResource?.(resource.url, resource.title[locale])}
+            className="group block w-full text-left"
             style={{ transform: `rotate(${align === "left" ? -1.5 + index * 1.2 : 1.5 - index * 1.1}deg)` }}
           >
             <div className="relative overflow-hidden rounded-2xl border border-[var(--border)]/45 bg-[var(--background)]/86 p-2.5 shadow-sm transition-all duration-200 group-hover:-translate-y-1 group-hover:border-[var(--primary)]/50 group-hover:shadow-xl dark:bg-slate-900/86 lg:p-3">
@@ -635,47 +967,10 @@ function ResourceStack({
                 <ExternalLink className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[var(--muted-foreground)] opacity-60 transition-opacity group-hover:opacity-100" />
               </div>
             </div>
-          </a>
+          </button>
         ))}
       </div>
     </section>
   );
 }
 
-function ResourceMobileThumbs({
-  locale,
-  resources,
-}: {
-  locale: LocaleKey;
-  resources: NodeResource[];
-}) {
-  if (resources.length === 0) return null;
-
-  return (
-    <div className="pointer-events-none absolute inset-x-3 top-3 z-20 md:hidden">
-      <div className="pointer-events-auto flex gap-2 overflow-x-auto rounded-2xl border border-[var(--border)]/45 bg-[var(--background)]/62 p-2 shadow-[0_14px_42px_rgba(15,23,42,0.10)] backdrop-blur-xl">
-        {resources.map((resource, index) => (
-          <a
-            key={`${resource.url}-${index}`}
-            href={resource.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex min-w-[132px] max-w-[150px] shrink-0 items-center gap-2 rounded-xl border border-[var(--border)]/45 bg-[var(--card)]/82 px-2.5 py-2 text-xs shadow-sm"
-          >
-            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-amber-100 text-amber-700">
-              <FileText className="h-3.5 w-3.5" />
-            </span>
-            <span className="min-w-0">
-              <span className="block truncate font-black">
-                {resource.title[locale]}
-              </span>
-              <span className="mt-0.5 block truncate text-[10px] text-[var(--muted-foreground)]">
-                {resource.type.toUpperCase()}
-              </span>
-            </span>
-          </a>
-        ))}
-      </div>
-    </div>
-  );
-}

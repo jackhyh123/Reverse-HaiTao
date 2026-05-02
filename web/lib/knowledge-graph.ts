@@ -20,6 +20,12 @@ export interface NodeResource {
   summary?: LocalizedText;
 }
 
+export interface PracticalTask {
+  zh: string;
+  en: string;
+  evaluation_criteria?: { zh: string; en: string };
+}
+
 export interface GraphNode {
   id: string;
   track_ids: string[];
@@ -32,6 +38,17 @@ export interface GraphNode {
   mastery_criteria: LocalizedText;
   resources?: NodeResource[];
   position?: { x: number; y: number };
+  practical_task?: PracticalTask;
+}
+
+export interface TaskEvalResult {
+  node_id: string;
+  passed: boolean;
+  score: number;
+  feedback: string;
+  strengths: string[];
+  improvements: string[];
+  next_step: string;
 }
 
 export interface KnowledgeGraph {
@@ -108,6 +125,23 @@ export async function fetchMyProgress(): Promise<{
   };
 }
 
+export async function fetchUserProgress(email: string): Promise<{
+  progress: ProgressRow[];
+  mastered_node_ids: string[];
+  email: string;
+}> {
+  const r = await fetch(apiUrl(`/api/v1/knowledge-graph/progress/${encodeURIComponent(email)}`), {
+    ...COMMON,
+    cache: "no-store",
+  });
+  if (!r.ok) throw new Error(`user_progress_fetch_failed:${r.status}`);
+  return (await r.json()) as {
+    progress: ProgressRow[];
+    mastered_node_ids: string[];
+    email: string;
+  };
+}
+
 export async function recommendNext(
   trackId?: string,
   limit: number = 5,
@@ -148,11 +182,16 @@ export async function upsertProgress(
 export async function checkMastery(
   nodeId: string,
   transcript: Array<{ role: "assistant" | "user"; content: string }>,
+  viewedResources?: Array<{ url: string; title: string; viewedAt: number }>,
 ): Promise<MasteryCheckResult> {
+  const body: Record<string, unknown> = { node_id: nodeId, transcript };
+  if (viewedResources && viewedResources.length > 0) {
+    body.viewed_resources = viewedResources;
+  }
   const r = await fetch(apiUrl("/api/v1/knowledge-graph/check-mastery"), {
     ...COMMON,
     method: "POST",
-    body: JSON.stringify({ node_id: nodeId, transcript }),
+    body: JSON.stringify(body),
   });
   if (!r.ok) {
     const err = (await r.json().catch(() => ({}))) as { detail?: string };
@@ -164,17 +203,38 @@ export async function checkMastery(
 export async function tutor(
   nodeId: string,
   messages: Array<{ role: "assistant" | "user"; content: string }>,
+  viewedResources?: Array<{ url: string; title: string; viewedAt: number }>,
 ): Promise<{ reply: string; mastery_signal: boolean }> {
+  const body: Record<string, unknown> = { node_id: nodeId, messages };
+  if (viewedResources && viewedResources.length > 0) {
+    body.viewed_resources = viewedResources;
+  }
   const r = await fetch(apiUrl("/api/v1/knowledge-graph/tutor"), {
     ...COMMON,
     method: "POST",
-    body: JSON.stringify({ node_id: nodeId, messages }),
+    body: JSON.stringify(body),
   });
   if (!r.ok) {
     const err = (await r.json().catch(() => ({}))) as { detail?: string };
     throw new Error(err.detail || `tutor_failed:${r.status}`);
   }
   return (await r.json()) as { reply: string; mastery_signal: boolean };
+}
+
+export async function evaluateTask(
+  nodeId: string,
+  taskAnswer: string,
+): Promise<TaskEvalResult> {
+  const r = await fetch(apiUrl("/api/v1/knowledge-graph/evaluate-task"), {
+    ...COMMON,
+    method: "POST",
+    body: JSON.stringify({ node_id: nodeId, task_answer: taskAnswer }),
+  });
+  if (!r.ok) {
+    const err = (await r.json().catch(() => ({}))) as { detail?: string };
+    throw new Error(err.detail || `evaluate_task_failed:${r.status}`);
+  }
+  return (await r.json()) as TaskEvalResult;
 }
 
 export async function resetProgress(nodeId?: string): Promise<number> {
@@ -186,6 +246,91 @@ export async function resetProgress(nodeId?: string): Promise<number> {
   if (!r.ok) throw new Error(`reset_failed:${r.status}`);
   const data = (await r.json()) as { deleted: number };
   return data.deleted;
+}
+
+// ─── Resource fetch proxy (inline reading via Feishu Open API) ───────────
+
+/** A single inline text element from a Feishu doc block. */
+export interface FeishuElement {
+  text: string;
+  bold: boolean;
+  italic: boolean;
+  code: boolean;
+  link: string | null;
+}
+
+/**
+ * A structured content block returned by the Feishu Docx API.
+ * Replaces the old markdown-text-based approach.
+ */
+export type FeishuBlock =
+  | { type: "heading"; level: number; elements: FeishuElement[] }
+  | { type: "paragraph"; elements: FeishuElement[] }
+  | { type: "list"; ordered: boolean; elements: FeishuElement[] }
+  | { type: "code"; text: string; language: number }
+  | { type: "blockquote"; elements: FeishuElement[] }
+  | { type: "callout"; elements: FeishuElement[] }
+  | { type: "divider" };
+
+export interface RelatedLink {
+  concept: string;   // matched concept name
+  doc_url: string;   // linked document URL
+  doc_title: string; // linked document title
+  node_id: string;   // owning node ID
+}
+
+export interface FetchResourceResult {
+  url: string;
+  title: string;
+  content: string; // plain-text fallback
+  blocks: FeishuBlock[];
+  related_links: RelatedLink[];
+  error: string;
+}
+
+export async function fetchResourceContent(
+  url: string,
+): Promise<FetchResourceResult> {
+  const r = await fetch(apiUrl("/api/v1/knowledge-graph/fetch-resource"), {
+    ...COMMON,
+    method: "POST",
+    body: JSON.stringify({ url }),
+  });
+  if (!r.ok) {
+    const err = (await r.json().catch(() => ({}))) as { detail?: string };
+    throw new Error(err.detail || `fetch_resource_failed:${r.status}`);
+  }
+  return (await r.json()) as FetchResourceResult;
+}
+
+// ─── Document Explainer (inline AI assistant) ─────────────────────────────
+
+export interface ExplainPayload {
+  node_id: string;
+  document_url: string;
+  document_title: string;
+  document_content: string;
+  question: string;
+  conversation_history: { role: "user" | "assistant"; content: string }[];
+}
+
+export interface ExplainResult {
+  reply: string;
+}
+
+export async function explainDocument(
+  payload: ExplainPayload,
+): Promise<ExplainResult> {
+  const r = await fetch(apiUrl("/api/v1/knowledge-graph/explain"), {
+    ...COMMON,
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+  if (!r.ok) {
+    const err = (await r.json().catch(() => ({}))) as { detail?: string };
+    throw new Error(err.detail || `explain_failed:${r.status}`);
+  }
+  return (await r.json()) as ExplainResult;
 }
 
 // ─── Pure-client graph helpers (no API) ──────────────────────────────────

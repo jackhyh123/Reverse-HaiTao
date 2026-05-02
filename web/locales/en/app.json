@@ -62,6 +62,7 @@
   "admin.nav.overview": "Overview",
   "admin.nav.knowledgeGraph": "Knowledge Graph",
   "admin.nav.knowledgeSync": "Knowledge Sync",
+  "admin.nav.graphPreview": "Graph Preview",
   "admin.nav.members": "Members",
   "admin.nav.feedback": "Feedback",
   "admin.nav.system": "System",
@@ -1587,5 +1588,54 @@
   "Original file is not stored (sent before preview was supported).": "Original file is not stored (sent before preview was supported).",
   "Preview is not available for this file type.": "Preview is not available for this file type.",
   "Showing extracted text — the same content the assistant reads. Download the original to see full formatting.": "Showing extracted text — the same content the assistant reads. Download the original to see full formatting.",
-  "nav.feedback": "Say Something"
+  "nav.feedback": "Say Something",
+
+  "learn.practice.tabLabel": "Practice",
+  "learn.practice.taskDescription": "Practical Task",
+  "learn.practice.evaluationCriteria": "Evaluation Criteria",
+  "learn.practice.yourAnswer": "Your Answer",
+  "learn.practice.answerPlaceholder": "Write your observations, results, or thoughts…",
+  "learn.practice.submit": "Submit for Evaluation",
+  "learn.practice.submitting": "Evaluating…",
+  "learn.practice.passed": "Passed!",
+  "learn.practice.notPassed": "Not Passed",
+  "learn.practice.score": "Score",
+  "learn.practice.strengths": "Strengths",
+  "learn.practice.improvements": "Areas for Improvement",
+  "learn.practice.nextStep": "Next Step",
+  "learn.practice.retry": "Retry",
+  "learn.practice.autoSaved": "Answer auto-saved",
+
+  "learn.notes.label": "Study Notes",
+  "learn.notes.placeholder": "Record your thoughts, insights, or questions…",
+  "learn.notes.saving": "Saving…",
+  "learn.notes.saved": "Saved",
+  "learn.notes.saveManual": "Save Notes",
+  "learn.notes.unsavedHint": "Unsaved notes",
+
+  "learn.reading.inlineTitle": "Document Reader",
+  "learn.reading.loading": "Loading document content…",
+  "learn.reading.openOriginal": "Open in Feishu",
+  "learn.reading.fetchError": "Unable to load document content. Please open the link directly.",
+  "learn.reading.close": "Close",
+
+  "learn.milestone.dismiss": "Got it",
+  "learn.milestone.goToNext": "Continue Learning",
+  "learn.milestone.foundationComplete": "🎉 Foundation Complete! You've mastered the core anti-Tao concept system",
+  "learn.milestone.sellerComplete": "🚀 Seller Track Complete! You can now select products and make sales",
+  "learn.milestone.operatorComplete": "⚙️ Operator Track Complete! You can now build and run an anti-Tao platform",
+  "learn.milestone.allComplete": "🏆 Full-Stack Anti-Tao Expert! You've mastered the complete system",
+
+  "learn.streak.days_one": "🔥 {{count}} day streak",
+  "learn.streak.days_other": "🔥 {{count}} day streak",
+
+  "learn.badges.title": "Achievement Badges",
+  "learn.badges.earned": "{{count}} badges earned",
+  "learn.badges.empty": "Start learning to unlock badges",
+  "learn.badges.freshBadge": "New badge unlocked!",
+
+  "learn.roadmap.step": "Step {{current}}/{{total}}",
+  "learn.roadmap.next": "Next: ",
+  "learn.roadmap.allDone": "🎉 All mastered!",
+  "learn.roadmap.outcome": "When done you'll be able to: "
 }

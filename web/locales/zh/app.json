@@ -62,6 +62,7 @@
   "admin.nav.overview": "总览",
   "admin.nav.knowledgeGraph": "知识图谱",
   "admin.nav.knowledgeSync": "知识同步",
+  "admin.nav.graphPreview": "图谱预览",
   "admin.nav.members": "会员",
   "admin.nav.feedback": "用户反馈",
   "admin.nav.system": "系统",
@@ -1587,5 +1588,54 @@
   "Original file is not stored (sent before preview was supported).": "原始文件未保存（消息发送于预览功能上线之前）。",
   "Preview is not available for this file type.": "暂不支持预览此类文件。",
   "Showing extracted text — the same content the assistant reads. Download the original to see full formatting.": "以下是提取出的纯文本，也是助手实际读取的内容。如需查看完整排版，请下载原文件。",
-  "nav.feedback": "你想说啥"
+  "nav.feedback": "你想说啥",
+
+  "learn.practice.tabLabel": "实操任务",
+  "learn.practice.taskDescription": "实操任务",
+  "learn.practice.evaluationCriteria": "评估标准",
+  "learn.practice.yourAnswer": "你的答案",
+  "learn.practice.answerPlaceholder": "写下你的实操结果、观察或心得…",
+  "learn.practice.submit": "提交评估",
+  "learn.practice.submitting": "正在评估…",
+  "learn.practice.passed": "通过！",
+  "learn.practice.notPassed": "未通过",
+  "learn.practice.score": "得分",
+  "learn.practice.strengths": "做得好的地方",
+  "learn.practice.improvements": "还需要改进",
+  "learn.practice.nextStep": "下一步建议",
+  "learn.practice.retry": "重新提交",
+  "learn.practice.autoSaved": "答案已自动保存",
+
+  "learn.notes.label": "学习笔记",
+  "learn.notes.placeholder": "记录你的思考、心得或疑问…",
+  "learn.notes.saving": "保存中…",
+  "learn.notes.saved": "已保存",
+  "learn.notes.saveManual": "保存笔记",
+  "learn.notes.unsavedHint": "有未保存的笔记",
+
+  "learn.reading.inlineTitle": "文档阅读",
+  "learn.reading.loading": "正在加载文档内容…",
+  "learn.reading.openOriginal": "在飞书中打开",
+  "learn.reading.fetchError": "无法加载文档内容，请直接打开链接查看",
+  "learn.reading.close": "关闭",
+
+  "learn.milestone.dismiss": "知道了",
+  "learn.milestone.goToNext": "继续学习",
+  "learn.milestone.foundationComplete": "🎉 基础通关！你已掌握反淘核心概念体系",
+  "learn.milestone.sellerComplete": "🚀 卖家赛道通关！你已具备选品和出单的基础能力",
+  "learn.milestone.operatorComplete": "⚙️ 运营赛道通关！你已能搭建和运营反向海淘平台",
+  "learn.milestone.allComplete": "🏆 全栈反淘达人！你已掌握从选品到平台运营的完整体系",
+
+  "learn.streak.days_one": "🔥 连续 {{count}} 天",
+  "learn.streak.days_other": "🔥 连续 {{count}} 天",
+
+  "learn.badges.title": "成就徽章",
+  "learn.badges.earned": "已获得 {{count}} 个徽章",
+  "learn.badges.empty": "开始学习以解锁徽章",
+  "learn.badges.freshBadge": "新徽章解锁！",
+
+  "learn.roadmap.step": "第 {{current}}/{{total}} 步",
+  "learn.roadmap.next": "下一步：",
+  "learn.roadmap.allDone": "🎉 全部通关！",
+  "learn.roadmap.outcome": "学完后你能："
 }

@@ -1,30 +1,38 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   AlertCircle,
   ArrowRight,
   BookOpen,
   Bot,
   CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
+  ClipboardCheck,
   ExternalLink,
   Loader2,
   Send,
   Sparkles,
+  Target,
   X,
 } from "lucide-react";
 import {
   checkMastery,
+  evaluateTask,
   type GraphNode,
   type MasteryCheckResult,
   type NodeResource,
+  type TaskEvalResult,
   tutor,
   upsertProgress,
 } from "@/lib/knowledge-graph";
 import { loadFromStorage, saveToStorage } from "@/lib/persistence";
+import { getViewedResources, recordResourceView } from "@/lib/resource-tracking";
+import InlineResourceReader from "@/components/learn/InlineResourceReader";
 
 type LocaleKey = "zh" | "en";
-type Tab = "resources" | "tutor";
+type Tab = "resources" | "tutor" | "practice";
 
 interface ChatMessage {
   role: "assistant" | "user";
@@ -37,9 +45,14 @@ interface NodeDetailPanelProps {
   locale: LocaleKey;
   isMastered: boolean;
   isLoggedIn: boolean;
+  initialNotes?: string;
   onClose: () => void;
   onMarkMastered: () => Promise<void>;
   onSelectNodeById?: (nodeId: string) => void;
+  onPrevNode?: () => void;
+  onNextNode?: () => void;
+  hasPrev?: boolean;
+  hasNext?: boolean;
 }
 
 const tutorStorageKey = (nodeId: string) => `learn_node_tutor_messages_${nodeId}`;
@@ -49,9 +62,14 @@ export default function NodeDetailPanel({
   locale,
   isMastered,
   isLoggedIn,
+  initialNotes = "",
   onClose,
   onMarkMastered,
   onSelectNodeById,
+  onPrevNode,
+  onNextNode,
+  hasPrev = false,
+  hasNext = false,
 }: NodeDetailPanelProps) {
   const hasResources = (node.resources?.length || 0) > 0;
   const [tab, setTab] = useState<Tab>(hasResources ? "resources" : "tutor");
@@ -63,9 +81,28 @@ export default function NodeDetailPanel({
   const [checkError, setCheckError] = useState("");
   const [checkResult, setCheckResult] = useState<MasteryCheckResult | null>(null);
   const [masteryCardDismissed, setMasteryCardDismissed] = useState(false);
+  const [readerUrl, setReaderUrl] = useState<string | null>(null);
+  const [readerTitle, setReaderTitle] = useState("");
+  const [readerStack, setReaderStack] = useState<
+    { url: string; title: string; nodeId: string }[]
+  >([]);
+  // Refs for latest reader state (avoids stale closure in navigation callbacks)
+  const readerUrlRef = useRef(readerUrl);
+  const readerTitleRef = useRef(readerTitle);
+  readerUrlRef.current = readerUrl;
+  readerTitleRef.current = readerTitle;
+  // Notes state
+  const notesKey = `learn_notes_${node.id}`;
+  const [notes, setNotes] = useState(initialNotes);
+  const [notesSaving, setNotesSaving] = useState(false);
+  const [notesSaved, setNotesSaved] = useState(false);
+  const [notesExpanded, setNotesExpanded] = useState(!!initialNotes);
+  const notesDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const hasNotesEverLoadedRef = useRef(false);
   const loadedNodeIdRef = useRef<string | null>(null);
   const skipNextSaveRef = useRef(false);
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  const [criteriaExpanded, setCriteriaExpanded] = useState(false);
 
   // Reset chat when switching node
   useEffect(() => {
@@ -81,6 +118,7 @@ export default function NodeDetailPanel({
     setCheckError("");
     setMasteryCardDismissed(false);
     setTab(savedMessages.length > 0 ? "tutor" : hasResources ? "resources" : "tutor");
+    setCriteriaExpanded(false);
   }, [node.id, hasResources]);
 
   useEffect(() => {
@@ -97,13 +135,83 @@ export default function NodeDetailPanel({
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [messages]);
 
+  // Notes: load from prop on node change, with localStorage backup
+  useEffect(() => {
+    const localNotes = loadFromStorage<string>(notesKey, "");
+    setNotes(initialNotes || localNotes);
+    setNotesSaved(false);
+    setNotesExpanded(!!(initialNotes || localNotes));
+    hasNotesEverLoadedRef.current = true;
+  }, [node.id, initialNotes]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Notes: debounced auto-save to localStorage
+  useEffect(() => {
+    if (!hasNotesEverLoadedRef.current) return;
+    if (notesDebounceRef.current) clearTimeout(notesDebounceRef.current);
+    notesDebounceRef.current = setTimeout(() => {
+      saveToStorage(notesKey, notes);
+    }, 1500);
+    return () => {
+      if (notesDebounceRef.current) clearTimeout(notesDebounceRef.current);
+    };
+  }, [notes]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Notes: save to backend
+  const saveNotesToBackend = async () => {
+    if (!isLoggedIn) return;
+    setNotesSaving(true);
+    setNotesSaved(false);
+    try {
+      await upsertProgress(node.id, "in_progress", notes);
+      setNotesSaved(true);
+      setTimeout(() => setNotesSaved(false), 2000);
+    } catch {
+      // Silently fail — localStorage is the backup
+    } finally {
+      setNotesSaving(false);
+    }
+  };
+
+  // ─── Internal link navigation ───────────────────────────────────────────
+
+  const handleNavigateToLinkedDoc = useCallback(
+    (url: string, title: string, _nodeId: string) => {
+      const currentUrl = readerUrlRef.current;
+      if (currentUrl) {
+        setReaderStack((prev) => [
+          ...prev,
+          { url: currentUrl, title: readerTitleRef.current, nodeId: node.id },
+        ]);
+      }
+      setReaderUrl(url);
+      setReaderTitle(title);
+    },
+    [node.id],
+  );
+
+  const handleBreadcrumbClick = useCallback(
+    (index: number) => {
+      let target: { url: string; title: string; nodeId: string } | undefined;
+      setReaderStack((prev) => {
+        if (index < 0 || index >= prev.length) return prev;
+        target = prev[index];
+        return prev.slice(0, index);
+      });
+      if (target) {
+        setReaderUrl(target.url);
+        setReaderTitle(target.title);
+      }
+    },
+    [],
+  );
+
   // Auto-open tutor with first teaching turn
   const openTutor = async () => {
     if (tutorOpened) return;
     setTutorOpened(true);
     setSending(true);
     try {
-      const r = await tutor(node.id, []);
+      const r = await tutor(node.id, [], getViewedResources(node.id));
       setMessages([
         { role: "assistant", content: r.reply, mastery_signal: r.mastery_signal },
       ]);
@@ -134,6 +242,7 @@ export default function NodeDetailPanel({
       const r = await tutor(
         node.id,
         next.map(({ role, content }) => ({ role, content })),
+        getViewedResources(node.id),
       );
       setMessages((prev) => [
         ...prev,
@@ -158,6 +267,7 @@ export default function NodeDetailPanel({
       const result = await checkMastery(
         node.id,
         messages.map(({ role, content }) => ({ role, content })),
+        getViewedResources(node.id),
       );
       setCheckResult(result);
       if (result.mastered) {
@@ -195,7 +305,17 @@ export default function NodeDetailPanel({
   return (
     <div className="flex h-full flex-col bg-[var(--background)]">
       {/* Header */}
-      <div className="flex items-start justify-between gap-3 border-b border-[var(--border)]/40 p-5">
+      <div className="flex items-start gap-2 border-b border-[var(--border)]/40 px-4 py-3 md:gap-3 md:p-5">
+        {/* Prev node arrow (mobile only) */}
+        <button
+          onClick={onPrevNode}
+          disabled={!hasPrev}
+          className="mt-1 hidden shrink-0 rounded-lg p-1 text-[var(--muted-foreground)] hover:bg-[var(--secondary)]/40 disabled:opacity-30 md:hidden"
+          title="上一个节点"
+        >
+          <ChevronLeft className="h-5 w-5" />
+        </button>
+
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
             {node.estimated_minutes} min
@@ -205,34 +325,59 @@ export default function NodeDetailPanel({
                 已掌握
               </span>
             )}
-            {(node.tags || []).slice(0, 3).map((t) => (
-              <span key={t} className="rounded bg-[var(--secondary)]/40 px-1.5 py-0.5">
+            {(node.tags || []).slice(0, 3).map((t, i) => (
+              <span key={t} className={`rounded bg-[var(--secondary)]/40 px-1.5 py-0.5 ${i >= 2 ? "hidden md:inline" : ""}`}>
                 {t}
               </span>
             ))}
           </div>
-          <h2 className="mt-1 text-xl font-semibold tracking-tight">
+          <h2 className="mt-0.5 text-base font-semibold tracking-tight md:mt-1 md:text-xl">
             {node.title[locale]}
           </h2>
-          <p className="mt-2 text-sm leading-6 text-[var(--muted-foreground)]">
+          <p className="mt-1 hidden text-xs leading-5 text-[var(--muted-foreground)] md:mt-2 md:block md:text-sm md:leading-6">
             {node.summary[locale]}
           </p>
         </div>
+
+        {/* Next node arrow (mobile only) */}
+        <button
+          onClick={onNextNode}
+          disabled={!hasNext}
+          className="mt-1 hidden shrink-0 rounded-lg p-1 text-[var(--muted-foreground)] hover:bg-[var(--secondary)]/40 disabled:opacity-30 md:hidden"
+          title="下一个节点"
+        >
+          <ChevronRight className="h-5 w-5" />
+        </button>
+
+        {/* Close button */}
         <button
           onClick={onClose}
-          className="rounded-lg p-1.5 text-[var(--muted-foreground)] hover:bg-[var(--secondary)]/40"
+          className="shrink-0 rounded-lg p-1.5 text-[var(--muted-foreground)] hover:bg-[var(--secondary)]/40"
           title="关闭"
         >
           <X className="h-4 w-4" />
         </button>
       </div>
 
-      {/* Mastery criteria pill */}
-      <div className="border-b border-[var(--border)]/40 bg-[var(--secondary)]/20 px-5 py-3">
-        <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
-          掌握标准
-        </div>
-        <div className="mt-1 text-sm">{node.mastery_criteria[locale]}</div>
+      {/* Mastery criteria — collapsible pill */}
+      <div className="border-b border-[var(--border)]/40 bg-[var(--secondary)]/20">
+        <button
+          onClick={() => setCriteriaExpanded((v) => !v)}
+          className="flex w-full items-center justify-between px-4 py-2 text-left md:px-5 md:py-3"
+        >
+          <span className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
+            <Target className="h-3 w-3" />
+            掌握标准
+          </span>
+          <span className={`text-[10px] text-[var(--muted-foreground)] transition-transform ${criteriaExpanded ? "rotate-180" : ""}`}>
+            ▾
+          </span>
+        </button>
+        {criteriaExpanded && (
+          <div className="px-4 pb-3 text-sm leading-6 md:px-5 md:pb-3">
+            {node.mastery_criteria[locale]}
+          </div>
+        )}
       </div>
 
       {/* Tabs */}
@@ -249,6 +394,14 @@ export default function NodeDetailPanel({
           icon={<Bot className="h-3.5 w-3.5" />}
           label="AI 导师"
         />
+        {node.practical_task && (
+          <TabButton
+            active={tab === "practice"}
+            onClick={() => setTab("practice")}
+            icon={<ClipboardCheck className="h-3.5 w-3.5" />}
+            label="实操任务"
+          />
+        )}
       </div>
 
       {/* Content */}
@@ -258,7 +411,13 @@ export default function NodeDetailPanel({
             {hasResources ? (
               <ul className="space-y-3">
                 {(node.resources || []).map((r, i) => (
-                  <ResourceItem key={i} resource={r} locale={locale} />
+                  <ResourceItem
+                    key={i}
+                    resource={r}
+                    locale={locale}
+                    nodeId={node.id}
+                    onOpenReader={(url, title) => { setReaderUrl(url); setReaderTitle(title); setReaderStack([]); }}
+                  />
                 ))}
               </ul>
             ) : (
@@ -280,6 +439,14 @@ export default function NodeDetailPanel({
           </div>
         )}
 
+        {tab === "practice" && node.practical_task && (
+          <PracticalTaskTab
+            nodeId={node.id}
+            task={node.practical_task}
+            locale={locale}
+          />
+        )}
+
         {tab === "tutor" && (
           <div className="flex h-full flex-col">
             <div ref={scrollRef} className="flex-1 overflow-y-auto px-5 py-4">
@@ -299,6 +466,64 @@ export default function NodeDetailPanel({
                       正在回应…
                     </div>
                   )}
+                </div>
+              )}
+            </div>
+
+            {/* Notes section */}
+            <div className="mx-4 mb-2">
+              {!notesExpanded ? (
+                <button
+                  onClick={() => setNotesExpanded(true)}
+                  className="inline-flex items-center gap-1.5 rounded-full border border-[var(--border)]/70 bg-[var(--background)] px-3 py-1.5 text-xs text-[var(--muted-foreground)] shadow-sm hover:border-[var(--primary)] hover:text-[var(--foreground)]"
+                >
+                  <BookOpen className="h-3.5 w-3.5" />
+                  学习笔记
+                  {notes && <span className="ml-1 h-1.5 w-1.5 rounded-full bg-[var(--primary)]" />}
+                </button>
+              ) : (
+                <div className="rounded-xl border border-[var(--border)]/60 bg-[var(--secondary)]/10 text-sm shadow-sm">
+                  <div className="flex items-center justify-between border-b border-[var(--border)]/40 px-3 py-2">
+                    <span className="text-xs font-semibold">学习笔记</span>
+                    <div className="flex items-center gap-1.5">
+                      {notesSaving ? (
+                        <span className="text-[10px] text-[var(--muted-foreground)]">保存中…</span>
+                      ) : notesSaved ? (
+                        <span className="text-[10px] text-emerald-600">已保存</span>
+                      ) : null}
+                      <button
+                        onClick={() => setNotesExpanded(false)}
+                        className="rounded p-0.5 text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                  <textarea
+                    value={notes}
+                    onChange={(e) => setNotes(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                        e.preventDefault();
+                        saveNotesToBackend();
+                      }
+                    }}
+                    placeholder="记录你的思考、心得或疑问…"
+                    rows={3}
+                    className="w-full resize-none border-0 bg-transparent px-3 py-2 text-xs leading-5 text-[var(--foreground)] placeholder:text-[var(--muted-foreground)] focus:outline-none"
+                  />
+                  <div className="flex items-center justify-between border-t border-[var(--border)]/40 px-3 py-1.5">
+                    <span className="text-[10px] text-[var(--muted-foreground)]">
+                      Ctrl+Enter 快速保存
+                    </span>
+                    <button
+                      onClick={saveNotesToBackend}
+                      disabled={notesSaving}
+                      className="rounded-lg bg-[var(--primary)] px-2.5 py-1 text-[10px] font-semibold text-[var(--primary-foreground)] hover:opacity-90 disabled:opacity-50"
+                    >
+                      {notesSaving ? "保存中…" : "保存到云端"}
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
@@ -409,6 +634,20 @@ export default function NodeDetailPanel({
           </div>
         )}
       </div>
+
+      {/* Inline resource reader */}
+      {readerUrl && (
+        <InlineResourceReader
+          nodeId={node.id}
+          url={readerUrl}
+          title={readerTitle}
+          locale={locale}
+          onClose={() => { setReaderUrl(null); setReaderTitle(""); setReaderStack([]); }}
+          onNavigate={handleNavigateToLinkedDoc}
+          breadcrumbStack={readerStack}
+          onBreadcrumbClick={handleBreadcrumbClick}
+        />
+      )}
     </div>
   );
 }
@@ -544,7 +783,17 @@ function MasteryResultCard({
   );
 }
 
-function ResourceItem({ resource, locale }: { resource: NodeResource; locale: LocaleKey }) {
+function ResourceItem({
+  resource,
+  locale,
+  nodeId,
+  onOpenReader,
+}: {
+  resource: NodeResource;
+  locale: LocaleKey;
+  nodeId?: string;
+  onOpenReader?: (url: string, title: string) => void;
+}) {
   const typeColor =
     resource.type === "article"
       ? "bg-blue-100 text-blue-700"
@@ -553,13 +802,26 @@ function ResourceItem({ resource, locale }: { resource: NodeResource; locale: Lo
       : resource.type === "video"
       ? "bg-rose-100 text-rose-700"
       : "bg-slate-100 text-slate-700";
+
+  const handleClick = (e: React.MouseEvent) => {
+    if (nodeId) {
+      recordResourceView(nodeId, resource.url, resource.title[locale]);
+    }
+    // Ctrl/Meta+click or right-click → let browser handle (new tab)
+    if (e.ctrlKey || e.metaKey || e.button !== 0) return;
+    // Normal click → open inline reader
+    e.preventDefault();
+    onOpenReader?.(resource.url, resource.title[locale]);
+  };
+
   return (
     <li>
       <a
         href={resource.url}
         target="_blank"
         rel="noopener noreferrer"
-        className="block rounded-2xl border border-[var(--border)]/60 bg-[var(--background)] p-3 transition-colors hover:border-[var(--primary)]"
+        onClick={handleClick}
+        className="block rounded-2xl border border-[var(--border)]/60 bg-[var(--background)] p-3 transition-colors hover:border-[var(--primary)] cursor-pointer"
       >
         <div className="flex items-center gap-2">
           <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase ${typeColor}`}>
@@ -577,6 +839,222 @@ function ResourceItem({ resource, locale }: { resource: NodeResource; locale: Lo
         )}
       </a>
     </li>
+  );
+}
+
+function PracticalTaskTab({
+  nodeId,
+  task,
+  locale,
+}: {
+  nodeId: string;
+  task: NonNullable<GraphNode["practical_task"]>;
+  locale: LocaleKey;
+}) {
+  const answerKey = `learn_node_task_answer_${nodeId}`;
+  const resultKey = `learn_node_task_result_${nodeId}`;
+  const [taskAnswer, setTaskAnswer] = useState("");
+  const [evaluating, setEvaluating] = useState(false);
+  const [evalResult, setEvalResult] = useState<TaskEvalResult | null>(null);
+  const [evalError, setEvalError] = useState("");
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const answerLoadedRef = useRef(false);
+
+  useEffect(() => {
+    const savedAnswer = loadFromStorage<string>(answerKey, "");
+    const savedResult = loadFromStorage<TaskEvalResult | null>(resultKey, null);
+    setTaskAnswer(savedAnswer);
+    if (savedResult) setEvalResult(savedResult);
+    answerLoadedRef.current = true;
+  }, [nodeId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!answerLoadedRef.current) return;
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      saveToStorage(answerKey, taskAnswer);
+    }, 1200);
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, [taskAnswer]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (evalResult) saveToStorage(resultKey, evalResult);
+  }, [evalResult]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleSubmit = async () => {
+    if (!taskAnswer.trim() || evaluating) return;
+    setEvaluating(true);
+    setEvalError("");
+    setEvalResult(null);
+    try {
+      const result = await evaluateTask(nodeId, taskAnswer.trim());
+      setEvalResult(result);
+    } catch (e) {
+      setEvalError(String(e instanceof Error ? e.message : e));
+    } finally {
+      setEvaluating(false);
+    }
+  };
+
+  const hasCriteria = !!task.evaluation_criteria?.[locale];
+
+  return (
+    <div className="h-full overflow-y-auto p-5">
+      <div className="rounded-2xl border border-[var(--border)]/60 bg-[var(--secondary)]/10 p-4">
+        <div className="mb-2 flex items-center gap-2">
+          <ClipboardCheck className="h-4 w-4 text-[var(--primary)]" />
+          <h3 className="text-sm font-semibold">实操任务</h3>
+        </div>
+        <p className="text-sm leading-6">{task[locale]}</p>
+      </div>
+
+      {hasCriteria && (
+        <div className="mt-3 rounded-2xl border border-[var(--border)]/60 bg-[var(--secondary)]/10 p-4">
+          <h4 className="mb-1 text-xs font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
+            评估标准
+          </h4>
+          <p className="text-sm leading-6 text-[var(--muted-foreground)]">
+            {task.evaluation_criteria![locale]}
+          </p>
+        </div>
+      )}
+
+      <div className="mt-4">
+        <label className="text-xs font-semibold text-[var(--muted-foreground)]">
+          你的答案
+        </label>
+        <textarea
+          value={taskAnswer}
+          onChange={(e) => setTaskAnswer(e.target.value)}
+          rows={6}
+          placeholder="写下你的实操结果、观察或心得…"
+          className="mt-1.5 w-full min-h-[120px] resize-y rounded-2xl border border-[var(--border)]/60 bg-[var(--background)] px-4 py-3 text-sm outline-none focus:border-[var(--primary)]"
+        />
+      </div>
+
+      <div className="mt-3">
+        <button
+          onClick={handleSubmit}
+          disabled={evaluating || !taskAnswer.trim()}
+          className="inline-flex items-center gap-2 rounded-xl bg-[var(--primary)] px-4 py-2 text-sm font-semibold text-[var(--primary-foreground)] hover:opacity-90 disabled:opacity-50"
+        >
+          {evaluating ? (
+            <>
+              <Loader2 className="h-4 w-4 animate-spin" />
+              正在评估…
+            </>
+          ) : (
+            <>
+              <Sparkles className="h-4 w-4" />
+              提交评估
+            </>
+          )}
+        </button>
+        {taskAnswer.trim() && !evaluating && !evalResult && !evalError && (
+          <span className="ml-3 text-xs text-[var(--muted-foreground)]">
+            答案已自动保存
+          </span>
+        )}
+      </div>
+
+      {evalError && (
+        <div className="mt-3 flex items-start gap-2 rounded-xl border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700 dark:bg-red-950/30 dark:text-red-200">
+          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>评估失败：{evalError}</span>
+        </div>
+      )}
+
+      {evalResult && (
+        <div className="mt-4 space-y-3">
+          <div
+            className={`rounded-2xl border p-4 ${
+              evalResult.passed
+                ? "border-emerald-300 bg-emerald-50 dark:bg-emerald-950/20"
+                : "border-amber-300 bg-amber-50 dark:bg-amber-950/20"
+            }`}
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                {evalResult.passed ? (
+                  <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+                ) : (
+                  <AlertCircle className="h-5 w-5 text-amber-600" />
+                )}
+                <span
+                  className={`text-lg font-bold ${
+                    evalResult.passed
+                      ? "text-emerald-800 dark:text-emerald-200"
+                      : "text-amber-800 dark:text-amber-200"
+                  }`}
+                >
+                  {evalResult.passed ? "通过！" : "未通过"}
+                </span>
+              </div>
+              <div className="flex items-baseline gap-1">
+                <span className="text-2xl font-bold">{evalResult.score}</span>
+                <span className="text-sm text-[var(--muted-foreground)]">/ 100</span>
+              </div>
+            </div>
+
+            <div className="mt-2 h-2 overflow-hidden rounded-full bg-white/60 dark:bg-black/20">
+              <div
+                className={`h-full rounded-full transition-all duration-500 ${
+                  evalResult.passed ? "bg-emerald-500" : "bg-amber-500"
+                }`}
+                style={{ width: `${Math.max(4, evalResult.score)}%` }}
+              />
+            </div>
+
+            {evalResult.feedback && (
+              <p className="mt-3 text-sm leading-6">{evalResult.feedback}</p>
+            )}
+          </div>
+
+          {evalResult.strengths && evalResult.strengths.length > 0 && (
+            <div className="rounded-2xl border border-emerald-200 bg-emerald-50/50 p-4 dark:bg-emerald-950/10">
+              <h4 className="mb-1.5 text-xs font-semibold text-emerald-700 dark:text-emerald-300">
+                做得好的地方
+              </h4>
+              <ul className="space-y-1">
+                {evalResult.strengths.map((s, i) => (
+                  <li key={i} className="flex items-start gap-2 text-sm text-emerald-800 dark:text-emerald-200">
+                    <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-500" />
+                    {s}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {evalResult.improvements && evalResult.improvements.length > 0 && (
+            <div className="rounded-2xl border border-amber-200 bg-amber-50/50 p-4 dark:bg-amber-950/10">
+              <h4 className="mb-1.5 text-xs font-semibold text-amber-700 dark:text-amber-300">
+                还需要改进
+              </h4>
+              <ul className="space-y-1">
+                {evalResult.improvements.map((s, i) => (
+                  <li key={i} className="flex items-start gap-2 text-sm text-amber-800 dark:text-amber-200">
+                    <ArrowRight className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-500" />
+                    {s}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {evalResult.next_step && (
+            <div className="rounded-2xl border border-[var(--border)]/60 bg-[var(--secondary)]/10 p-4">
+              <h4 className="mb-1 text-xs font-semibold text-[var(--muted-foreground)]">
+                下一步建议
+              </h4>
+              <p className="text-sm leading-6">{evalResult.next_step}</p>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 

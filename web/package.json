@@ -27,7 +27,7 @@
     "clsx": "^2.1.1",
     "cytoscape": "^3.33.1",
     "dagre": "^0.8.5",
-    "framer-motion": "^12.24.0",
+    "framer-motion": "^12.38.0",
     "html2canvas": "^1.4.1",
     "i18next": "^25.8.0",
     "jspdf": "^4.2.0",

@@ -6,6 +6,7 @@ import { useEffect } from "react";
 import {
   BookOpen,
   Cpu,
+  Eye,
   GraduationCap,
   LayoutDashboard,
   Loader2,
@@ -30,6 +31,7 @@ const ADMIN_NAV: AdminNavItem[] = [
   { href: "/admin", label: "admin.nav.overview", icon: LayoutDashboard },
   { href: "/admin/knowledge-graph", label: "admin.nav.knowledgeGraph", icon: Network },
   { href: "/admin/knowledge-sync", label: "admin.nav.knowledgeSync", icon: RefreshCcw },
+  { href: "/admin/knowledge-graph-preview", label: "admin.nav.graphPreview", icon: Eye },
   { href: "/admin/members", label: "admin.nav.members", icon: Users },
   { href: "/admin/feedback", label: "admin.nav.feedback", icon: MessageSquareText },
   { href: "/admin/system", label: "admin.nav.system", icon: Server },

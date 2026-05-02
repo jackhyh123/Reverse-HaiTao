@@ -233,6 +233,7 @@ from deeptutor.api.routers import (
     chat,
     co_writer,
     dashboard,
+    explore,
     feishu_wiki_sync,
     feedback,
     knowledge,
@@ -291,6 +292,11 @@ app.include_router(
     knowledge_graph.router,
     prefix="/api/v1/knowledge-graph",
     tags=["knowledge-graph"],
+)
+app.include_router(
+    explore.router,
+    prefix="/api/v1/explore",
+    tags=["explore"],
 )
 
 # Unified WebSocket endpoint
