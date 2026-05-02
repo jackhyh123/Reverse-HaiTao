@@ -8,6 +8,7 @@ import {
   BookOpen,
   Bot,
   ClipboardList,
+  Globe,
   Library,
   MessageSquare,
   MessageSquareText,
@@ -51,6 +52,7 @@ const PRIMARY_NAV: NavEntry[] = [
   },
   { href: "/curriculum", label: "nav.curriculum", icon: ClipboardList, adminOnly: true },
   // ↓ 普通会员可见的条目
+  { href: "/explore", label: "nav.explore", icon: Globe },
   { href: "/knowledge", label: "nav.knowledgeVault", icon: BookOpen },
   { href: "/book", label: "nav.playbooks", icon: Library },
   { href: "/feedback", label: "nav.feedback", icon: MessageSquareText },
