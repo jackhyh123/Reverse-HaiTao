@@ -319,6 +319,13 @@ echo "   - data/user/settings/agents.yaml"
 echo "============================================"
 
 # Start supervisord
+# If arguments are provided (e.g., from Railway startCommand), execute them directly.
+# Otherwise start supervisord for the full stack.
+if [ $# -gt 0 ]; then
+    echo "Running custom command: $@"
+    exec "$@"
+fi
+
 exec /usr/bin/supervisord -c /etc/supervisor/conf.d/deeptutor.conf
 EOF
 
