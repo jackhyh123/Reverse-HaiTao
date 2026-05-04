@@ -1,0 +1,43 @@
+# Railway Backend-Only Dockerfile
+# Only runs the FastAPI backend (no frontend)
+
+FROM python:3.11-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PYTHONIOENCODING=utf-8 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    build-essential \
+    libgl1 \
+    libglib2.0-0 \
+    libsm6 \
+    libxext6 \
+    libxrender1 \
+    pkg-config \
+    libssl-dev \
+    && rm -rf /var/lib/apt/lists/* \
+    && curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+
+ENV PATH="/root/.cargo/bin:${PATH}"
+
+COPY requirements/ ./requirements/
+COPY requirements.txt ./
+RUN pip install --upgrade pip && pip install -r requirements.txt
+
+COPY deeptutor/ ./deeptutor/
+COPY deeptutor_cli/ ./deeptutor_cli/
+COPY scripts/ ./scripts/
+COPY pyproject.toml ./
+
+RUN mkdir -p data/user data/knowledge_bases data/memory
+
+ENV BACKEND_PORT=8001
+EXPOSE 8001
+
+CMD ["sh", "-c", "python -m uvicorn deeptutor.api.main:app --host 0.0.0.0 --port ${PORT:-8001}"]

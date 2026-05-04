@@ -1,0 +1,8 @@
+[build]
+dockerfile = "Dockerfile.backend"
+
+[deploy]
+startCommand = "python -m uvicorn deeptutor.api.main:app --host 0.0.0.0 --port ${PORT:-8001}"
+
+[service]
+port = 8001
