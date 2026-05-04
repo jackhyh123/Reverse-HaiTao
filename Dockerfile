@@ -339,7 +339,7 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
     CMD curl -f http://localhost:${BACKEND_PORT:-8001}/ || exit 1
 
 # Set entrypoint
-ENTRYPOINT ["/app/entrypoint.sh"]
+# ENTRYPOINT disabled for Railway compatibility — startCommand runs directly
 
 # ============================================
 # Stage 4: Development Image (Optional)
