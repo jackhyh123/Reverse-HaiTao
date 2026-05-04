@@ -2,9 +2,10 @@
 
 // Get API base URL from environment variable.
 // The launcher injects NEXT_PUBLIC_API_BASE from the canonical project-root `.env`.
-export const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_BASE ||
-  (() => {
+// Deferred to runtime to avoid crashing during static generation (SSG) on Vercel.
+function getApiBaseUrl(): string {
+  const base = process.env.NEXT_PUBLIC_API_BASE;
+  if (!base) {
     if (typeof window !== "undefined") {
       console.error("NEXT_PUBLIC_API_BASE is not set.");
       console.error(
@@ -17,7 +18,15 @@ export const API_BASE_URL =
     throw new Error(
       "NEXT_PUBLIC_API_BASE is not configured. Please set it in your environment and restart.",
     );
-  })();
+  }
+  return base;
+}
+
+export const API_BASE_URL: string =
+  // During build/SSG, avoid throwing if not set — pages that don't call APIs can still render.
+  typeof process.env.NEXT_PUBLIC_API_BASE === "string" && process.env.NEXT_PUBLIC_API_BASE
+    ? process.env.NEXT_PUBLIC_API_BASE
+    : "";
 
 // Hostnames that always refer to the local machine. When the build-time base
 // URL points to one of these, but the page is opened from a non-local origin,
@@ -50,7 +59,7 @@ function isLoopbackHost(host: string): boolean {
  * like `http://localhost:8001/api` continue to work after the rewrite).
  */
 export function resolveBase(): string {
-  const base = API_BASE_URL;
+  const base = getApiBaseUrl();
   if (typeof window === "undefined") return base;
   try {
     const url = new URL(base);
