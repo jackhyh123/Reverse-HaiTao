@@ -2,14 +2,16 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useState } from "react";
 import {
-  BookOpen,
   Compass,
-  Globe,
+  GraduationCap,
+  Home,
   Library,
+  Menu,
   MessageSquareText,
-  Network,
   Newspaper,
+  X,
   type LucideIcon,
 } from "lucide-react";
 
@@ -20,9 +22,9 @@ interface MobileNavEntry {
 }
 
 const MOBILE_NAV: MobileNavEntry[] = [
-  { href: "/", label: "首页", icon: Network },
-  { href: "/explore", label: "生态图谱", icon: Globe },
-  { href: "/knowledge", label: "知识来源", icon: BookOpen },
+  { href: "/", label: "首页", icon: Home },
+  { href: "/explore", label: "生态图谱", icon: Compass },
+  { href: "/learn", label: "学习中心", icon: GraduationCap },
   { href: "/book", label: "通关手册", icon: Library },
   { href: "/feedback", label: "你想说啥", icon: MessageSquareText },
   { href: "/release-notes", label: "更新了啥", icon: Newspaper },
@@ -30,31 +32,92 @@ const MOBILE_NAV: MobileNavEntry[] = [
 
 export default function MobileUtilityNav() {
   const pathname = usePathname();
+  const [open, setOpen] = useState(false);
 
   const isActivePath = (href: string) =>
     href === "/" ? pathname === "/" : pathname.startsWith(href);
 
   return (
-    <nav className="border-b border-[var(--border)]/50 bg-[var(--background)]/92 px-2 py-2 backdrop-blur md:hidden">
-      <div className="flex gap-2 overflow-x-auto pb-1">
-        {MOBILE_NAV.map((item) => {
-          const active = isActivePath(item.href);
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={`flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-2 text-xs font-semibold transition-colors ${
-                active
-                  ? "border-[var(--primary)] bg-[var(--primary)] text-[var(--primary-foreground)]"
-                  : "border-[var(--border)]/70 bg-[var(--secondary)]/30 text-[var(--muted-foreground)]"
-              }`}
-            >
-              <item.icon className="h-3.5 w-3.5" />
-              {item.label}
-            </Link>
-          );
-        })}
+    <>
+      {/* ── Hamburger trigger (top-right, fixed) ── */}
+      <button
+        onClick={() => setOpen((p) => !p)}
+        className="fixed top-0 right-0 z-50 p-3 md:hidden"
+        aria-label={open ? "关闭菜单" : "打开菜单"}
+      >
+        {open ? (
+          <X className="h-5 w-5" style={{ color: "var(--foreground)" }} />
+        ) : (
+          <Menu className="h-5 w-5" style={{ color: "var(--foreground)" }} />
+        )}
+      </button>
+
+      {/* ── Menu overlay (always mounted for enter/exit transition) ── */}
+      <div
+        className={`fixed inset-0 z-40 transition-opacity duration-200 md:hidden ${
+          open ? "opacity-100" : "pointer-events-none opacity-0"
+        }`}
+        onClick={() => setOpen(false)}
+      >
+        {/* Backdrop */}
+        <div className="absolute inset-0 bg-black/40" />
+
+        {/* Slide-down card */}
+        <div
+          className={`absolute top-0 left-0 right-0 rounded-b-2xl border-b shadow-xl transition-transform duration-300 ease-out ${
+            open ? "translate-y-0" : "-translate-y-full"
+          }`}
+          style={{
+            background: "var(--background)",
+            borderColor: "var(--border)",
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="px-4 pt-14 pb-2">
+            <nav className="flex flex-col gap-1">
+              {MOBILE_NAV.map((item) => {
+                const active = isActivePath(item.href);
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    onClick={() => setOpen(false)}
+                    className="flex items-center gap-3 rounded-xl px-3 py-3 text-sm transition-colors active:bg-[var(--secondary)]"
+                    style={{
+                      color: active
+                        ? "var(--foreground)"
+                        : "var(--muted-foreground)",
+                      fontWeight: active ? 700 : 500,
+                      background: active
+                        ? "var(--secondary)"
+                        : "transparent",
+                    }}
+                  >
+                    <item.icon
+                      className="h-5 w-5"
+                      style={{
+                        color: active
+                          ? "var(--primary)"
+                          : "var(--muted-foreground)",
+                      }}
+                    />
+                    {item.label}
+                  </Link>
+                );
+              })}
+            </nav>
+          </div>
+
+          {/* Gradient fade at bottom */}
+          <div
+            className="h-8"
+            style={{
+              background:
+                "linear-gradient(to bottom, transparent, var(--background))",
+            }}
+          />
+        </div>
       </div>
-    </nav>
+    </>
   );
 }

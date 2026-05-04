@@ -30,9 +30,16 @@ import {
 import { loadFromStorage, saveToStorage } from "@/lib/persistence";
 import { getViewedResources, recordResourceView } from "@/lib/resource-tracking";
 import InlineResourceReader from "@/components/learn/InlineResourceReader";
+import type { FlowStageId, FocusDirectionId, FlowStageDef } from "@/lib/ecosystem-data";
 
 type LocaleKey = "zh" | "en";
 type Tab = "resources" | "tutor" | "practice";
+
+const TAB_LABELS: Record<Tab, string> = {
+  resources: "学习内容",
+  tutor: "AI讲解",
+  practice: "实践验证",
+};
 
 interface ChatMessage {
   role: "assistant" | "user";
@@ -53,6 +60,12 @@ interface NodeDetailPanelProps {
   onNextNode?: () => void;
   hasPrev?: boolean;
   hasNext?: boolean;
+  /** Current learning stage (for context display) */
+  currentStage?: FlowStageId;
+  /** Current focus direction (for tutor perspective) */
+  currentFocus?: FocusDirectionId;
+  /** Stage definition (for header badge) */
+  stageDef?: FlowStageDef;
 }
 
 const tutorStorageKey = (nodeId: string) => `learn_node_tutor_messages_${nodeId}`;
@@ -70,6 +83,9 @@ export default function NodeDetailPanel({
   onNextNode,
   hasPrev = false,
   hasNext = false,
+  currentStage,
+  currentFocus: _currentFocus,
+  stageDef,
 }: NodeDetailPanelProps) {
   const hasResources = (node.resources?.length || 0) > 0;
   const [tab, setTab] = useState<Tab>(hasResources ? "resources" : "tutor");
@@ -210,8 +226,18 @@ export default function NodeDetailPanel({
     if (tutorOpened) return;
     setTutorOpened(true);
     setSending(true);
+
     try {
-      const r = await tutor(node.id, [], getViewedResources(node.id));
+      const r = await tutor(
+        node.id,
+        [],
+        getViewedResources(node.id),
+        {
+          node_title: node.title.zh,
+          node_summary: node.summary.zh,
+          node_mastery_criteria: node.mastery_criteria?.zh || "",
+        },
+      );
       setMessages([
         { role: "assistant", content: r.reply, mastery_signal: r.mastery_signal },
       ]);
@@ -243,6 +269,11 @@ export default function NodeDetailPanel({
         node.id,
         next.map(({ role, content }) => ({ role, content })),
         getViewedResources(node.id),
+        {
+          node_title: node.title.zh,
+          node_summary: node.summary.zh,
+          node_mastery_criteria: node.mastery_criteria?.zh || "",
+        },
       );
       setMessages((prev) => [
         ...prev,
@@ -303,9 +334,11 @@ export default function NodeDetailPanel({
   const showMasteryCard = !masteryCardDismissed && hasMasteryPrompt;
 
   return (
-    <div className="flex h-full flex-col bg-[var(--background)]">
-      {/* Header */}
-      <div className="flex items-start gap-2 border-b border-[var(--border)]/40 px-4 py-3 md:gap-3 md:p-5">
+    <div className="flex h-full flex-col bg-[var(--background)]"
+      style={{ boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.3)" }}>
+      {/* Header — clay style */}
+      <div className="flex items-start gap-2 border-b-2 border-[var(--border)]/40 px-4 py-3 md:gap-3 md:p-5"
+        style={{ boxShadow: "inset 0 1px 0 rgba(255,255,255,0.4), 0 2px 8px rgba(120,100,80,0.04)" }}>
         {/* Prev node arrow (mobile only) */}
         <button
           onClick={onPrevNode}
@@ -317,7 +350,15 @@ export default function NodeDetailPanel({
         </button>
 
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
+          <div className="flex flex-wrap items-center gap-2 text-[10px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
+            {stageDef && (
+              <span
+                className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-white text-[10px] font-bold"
+                style={{ backgroundColor: stageDef.color }}
+              >
+                {stageDef.title[locale]}
+              </span>
+            )}
             {node.estimated_minutes} min
             {isMastered && (
               <span className="inline-flex items-center gap-1 rounded bg-emerald-100 px-1.5 py-0.5 text-emerald-700">
@@ -325,8 +366,8 @@ export default function NodeDetailPanel({
                 已掌握
               </span>
             )}
-            {(node.tags || []).slice(0, 3).map((t, i) => (
-              <span key={t} className={`rounded bg-[var(--secondary)]/40 px-1.5 py-0.5 ${i >= 2 ? "hidden md:inline" : ""}`}>
+            {(node.tags || []).slice(0, 2).map((t, i) => (
+              <span key={t} className={`rounded bg-[var(--secondary)]/40 px-1.5 py-0.5 ${i >= 1 ? "hidden md:inline" : ""}`}>
                 {t}
               </span>
             ))}
@@ -359,17 +400,18 @@ export default function NodeDetailPanel({
         </button>
       </div>
 
-      {/* Mastery criteria — collapsible pill */}
-      <div className="border-b border-[var(--border)]/40 bg-[var(--secondary)]/20">
+      {/* Mastery criteria — clay collapsible pill */}
+      <div className="border-b-2 border-[var(--border)]/30 bg-[var(--secondary)]/10"
+        style={{ boxShadow: "inset 0 -1px 0 rgba(255,255,255,0.3)" }}>
         <button
           onClick={() => setCriteriaExpanded((v) => !v)}
-          className="flex w-full items-center justify-between px-4 py-2 text-left md:px-5 md:py-3"
+          className="flex w-full items-center justify-between px-4 py-2.5 text-left md:px-5 md:py-3"
         >
-          <span className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
+          <span className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-[var(--muted-foreground)]">
             <Target className="h-3 w-3" />
             掌握标准
           </span>
-          <span className={`text-[10px] text-[var(--muted-foreground)] transition-transform ${criteriaExpanded ? "rotate-180" : ""}`}>
+          <span className={`text-[10px] text-[var(--muted-foreground)] transition-transform duration-200 ${criteriaExpanded ? "rotate-180" : ""}`}>
             ▾
           </span>
         </button>
@@ -386,20 +428,20 @@ export default function NodeDetailPanel({
           active={tab === "resources"}
           onClick={() => setTab("resources")}
           icon={<BookOpen className="h-3.5 w-3.5" />}
-          label={`资源 (${node.resources?.length || 0})`}
+          label={`${TAB_LABELS.resources} (${node.resources?.length || 0})`}
         />
         <TabButton
           active={tab === "tutor"}
           onClick={() => setTab("tutor")}
           icon={<Bot className="h-3.5 w-3.5" />}
-          label="AI 导师"
+          label={TAB_LABELS.tutor}
         />
         {node.practical_task && (
           <TabButton
             active={tab === "practice"}
             onClick={() => setTab("practice")}
             icon={<ClipboardCheck className="h-3.5 w-3.5" />}
-            label="实操任务"
+            label={TAB_LABELS.practice}
           />
         )}
       </div>
@@ -421,7 +463,8 @@ export default function NodeDetailPanel({
                 ))}
               </ul>
             ) : (
-              <div className="rounded-2xl border border-dashed border-[var(--border)]/60 bg-[var(--secondary)]/20 p-6 text-center">
+              <div className="rounded-[20px] border-2 border-dashed border-[var(--border)]/50 bg-[var(--card)]/80 p-6 text-center"
+                style={{ boxShadow: "inset 0 1px 0 rgba(255,255,255,0.5)" }}>
                 <BookOpen className="mx-auto h-6 w-6 text-[var(--muted-foreground)]" />
                 <div className="mt-2 text-sm">本节点暂无学习资源</div>
                 <div className="mt-1 text-xs text-[var(--muted-foreground)]">
@@ -668,11 +711,12 @@ function TabButton({
   return (
     <button
       onClick={onClick}
-      className={`flex items-center gap-1.5 border-b-2 px-3 py-2.5 text-xs font-medium transition-colors ${
+      className={`flex items-center gap-1.5 border-b-[2.5px] px-3.5 py-3 text-xs font-bold transition-all duration-200 ${
         active
           ? "border-[var(--primary)] text-[var(--foreground)]"
-          : "border-transparent text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
+          : "border-transparent text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:border-[var(--border)]"
       }`}
+      style={active ? { textShadow: "0 0 1px rgba(176,80,30,0.1)" } : undefined}
     >
       {icon}
       {label}
@@ -821,7 +865,8 @@ function ResourceItem({
         target="_blank"
         rel="noopener noreferrer"
         onClick={handleClick}
-        className="block rounded-2xl border border-[var(--border)]/60 bg-[var(--background)] p-3 transition-colors hover:border-[var(--primary)] cursor-pointer"
+        className="block rounded-[18px] border-2 border-[var(--border)]/40 bg-[var(--card)]/90 p-3.5 transition-all duration-200 hover:border-[var(--primary)]/60 hover:-translate-y-0.5 cursor-pointer"
+        style={{ boxShadow: "inset 0 1px 0 rgba(255,255,255,0.5), 0 2px 8px rgba(120,100,80,0.04)" }}
       >
         <div className="flex items-center gap-2">
           <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase ${typeColor}`}>

@@ -4,8 +4,8 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect } from "react";
 import {
-  BookOpen,
   Cpu,
+  Database,
   Eye,
   GraduationCap,
   LayoutDashboard,
@@ -16,6 +16,7 @@ import {
   RefreshCcw,
   Server,
   Users,
+  Wand2,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "@/context/AuthContext";
@@ -32,13 +33,14 @@ const ADMIN_NAV: AdminNavItem[] = [
   { href: "/admin/knowledge-graph", label: "admin.nav.knowledgeGraph", icon: Network },
   { href: "/admin/knowledge-sync", label: "admin.nav.knowledgeSync", icon: RefreshCcw },
   { href: "/admin/knowledge-graph-preview", label: "admin.nav.graphPreview", icon: Eye },
+  { href: "/admin/knowledge-bases", label: "admin.nav.knowledgeBases", icon: Database },
+  { href: "/admin/skills", label: "admin.nav.skills", icon: Wand2 },
   { href: "/admin/members", label: "admin.nav.members", icon: Users },
   { href: "/admin/feedback", label: "admin.nav.feedback", icon: MessageSquareText },
   { href: "/admin/system", label: "admin.nav.system", icon: Server },
 ];
 
 const EXTERNAL_NAV: AdminNavItem[] = [
-  { href: "/knowledge", label: "admin.nav.knowledge", icon: BookOpen, external: true },
   { href: "/settings", label: "admin.nav.settings", icon: Cpu, external: true },
   { href: "/curriculum", label: "admin.nav.curriculum", icon: GraduationCap, external: true },
 ];

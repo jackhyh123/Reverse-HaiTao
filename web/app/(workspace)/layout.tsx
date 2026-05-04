@@ -1,5 +1,4 @@
 import WorkspaceSidebar from "@/components/sidebar/WorkspaceSidebar";
-import MobileUtilityNav from "@/components/sidebar/MobileUtilityNav";
 import { UnifiedChatProvider } from "@/context/UnifiedChatContext";
 
 export default function WorkspaceLayout({
@@ -14,7 +13,6 @@ export default function WorkspaceLayout({
           <WorkspaceSidebar />
         </div>
         <main className="flex min-w-0 flex-1 flex-col overflow-hidden bg-[var(--background)]">
-          <MobileUtilityNav />
           <div className="min-h-0 flex-1 overflow-hidden">{children}</div>
         </main>
       </div>

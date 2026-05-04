@@ -7,6 +7,11 @@ export interface ExploreDomain {
   color: string;
 }
 
+export interface ExploreNodeResource {
+  title: string;     // Chinese title only (for explore display)
+  url: string;
+}
+
 export interface ExploreNodeConnection {
   target: string;
   relation: string;
@@ -19,6 +24,8 @@ export interface ExploreNode {
   summary: { zh: string; en: string };
   tags: string[];
   connections: ExploreNodeConnection[];
+  /** Feishu resources linked from the knowledge graph */
+  resources?: ExploreNodeResource[];
 }
 
 export interface ExploreGraph {
@@ -66,6 +73,11 @@ export const DEFAULT_EXPLORE_GRAPH: ExploreGraph = {
         { target: "ecom_platform", relation: "带货接入" },
         { target: "seller_distributor", relation: "直接供货" },
       ],
+      resources: [
+        { title: "KOL 引流", url: "https://xcn8pgdlg8x0.feishu.cn/wiki/DZnEwOo5gim2z6kI16Icx7hinFd" },
+        { title: "海外推广与博主合作", url: "https://xcn8pgdlg8x0.feishu.cn/wiki/K461wUx5eic5GAkTDNtcGdtdn9b" },
+        { title: "达人联盟与创作者管理", url: "https://xcn8pgdlg8x0.feishu.cn/wiki/JhRawRyzrioo3Lk3TevcBs5zn4b" },
+      ],
     },
     {
       id: "private_community",
@@ -76,6 +88,11 @@ export const DEFAULT_EXPLORE_GRAPH: ExploreGraph = {
       connections: [
         { target: "kol_general", relation: "达人延伸" },
         { target: "seller_distributor", relation: "社群团购" },
+      ],
+      resources: [
+        { title: "私域运营", url: "https://xcn8pgdlg8x0.feishu.cn/wiki/AlF3wRXYAiKugtkvx7Acqc0Vn6d" },
+        { title: "用户生态与社区运营", url: "https://xcn8pgdlg8x0.feishu.cn/wiki/XxOyw4hHtiDDIgk0Tu5cdctxnTf" },
+        { title: "UGC 用户共创", url: "https://xcn8pgdlg8x0.feishu.cn/wiki/RUCBwjapDiVRs0kGvSbcXzaRnhh" },
       ],
     },
     {
@@ -88,6 +105,10 @@ export const DEFAULT_EXPLORE_GRAPH: ExploreGraph = {
         { target: "ecom_platform", relation: "导流至平台" },
         { target: "seller_distributor", relation: "直接对接卖家" },
       ],
+      resources: [
+        { title: "Reddit 运营", url: "https://xcn8pgdlg8x0.feishu.cn/wiki/JY0WwQE7oirzgzkNM2DcaNU3ndd" },
+        { title: "流量闭环", url: "https://xcn8pgdlg8x0.feishu.cn/wiki/YHp2w51PMicK6PkmOEVcsXhBneh" },
+      ],
     },
     {
       id: "platform_traffic",
@@ -97,6 +118,10 @@ export const DEFAULT_EXPLORE_GRAPH: ExploreGraph = {
       tags: ["platforms", "traffic"],
       connections: [
         { target: "ecom_platform", relation: "平台内置" },
+      ],
+      resources: [
+        { title: "流量闭环", url: "https://xcn8pgdlg8x0.feishu.cn/wiki/YHp2w51PMicK6PkmOEVcsXhBneh" },
+        { title: "地区进入策略", url: "https://xcn8pgdlg8x0.feishu.cn/wiki/FOmvwFeAPiLcBKk4Jntcd2AWnef" },
       ],
     },
     {
@@ -110,6 +135,10 @@ export const DEFAULT_EXPLORE_GRAPH: ExploreGraph = {
         { target: "domestic_api", relation: "API 对接" },
         { target: "payment_api", relation: "支付结算" },
       ],
+      resources: [
+        { title: "Yupoo / 微店 / 淘宝 / 1688 关系", url: "https://xcn8pgdlg8x0.feishu.cn/wiki/Se6tw6XNSiWpOjk6aVJc0eI3nUe" },
+        { title: "反向海淘不需要入驻——概念校准", url: "https://xcn8pgdlg8x0.feishu.cn/wiki/FWGKw2GvIiBXsCkktQBcJrxJnse" },
+      ],
     },
     {
       id: "agent_platform",
@@ -121,6 +150,12 @@ export const DEFAULT_EXPLORE_GRAPH: ExploreGraph = {
         { target: "ecom_platform", relation: "对接货源" },
         { target: "warehouse_logistics", relation: "仓储物流" },
         { target: "kol_general", relation: "达人推广" },
+      ],
+      resources: [
+        { title: "商家与采购履约流程", url: "https://xcn8pgdlg8x0.feishu.cn/wiki/Nemyw0zsOiPWSLkhJi7cZ5P6nwh" },
+        { title: "订单 / 客服 / 售后流程", url: "https://xcn8pgdlg8x0.feishu.cn/wiki/J19Uw9UVliyhnWk7Q39czU5vnnD" },
+        { title: "用户购买流程总览", url: "https://xcn8pgdlg8x0.feishu.cn/wiki/FVzswR9I2iyHZbkLJiIcitCrnFK" },
+        { title: "定价模型", url: "https://xcn8pgdlg8x0.feishu.cn/wiki/FloQw03LaiXCLxkD2rAcKrE3nAe" },
       ],
     },
     {
@@ -134,6 +169,9 @@ export const DEFAULT_EXPLORE_GRAPH: ExploreGraph = {
         { target: "warehouse_logistics", relation: "物流对接" },
         { target: "kol_general", relation: "达人引流" },
       ],
+      resources: [
+        { title: "客服 / 支付 / 风控流程", url: "https://xcn8pgdlg8x0.feishu.cn/wiki/H1Mlwdf55iXY0ukAvCHcaCYHnrh" },
+      ],
     },
     {
       id: "social_commerce",
@@ -144,6 +182,10 @@ export const DEFAULT_EXPLORE_GRAPH: ExploreGraph = {
       connections: [
         { target: "kol_general", relation: "达人主阵地" },
         { target: "payment_api", relation: "支付链路" },
+      ],
+      resources: [
+        { title: "KOL 引流", url: "https://xcn8pgdlg8x0.feishu.cn/wiki/DZnEwOo5gim2z6kI16Icx7hinFd" },
+        { title: "海外推广与博主合作", url: "https://xcn8pgdlg8x0.feishu.cn/wiki/K461wUx5eic5GAkTDNtcGdtdn9b" },
       ],
     },
     {
@@ -157,6 +199,11 @@ export const DEFAULT_EXPLORE_GRAPH: ExploreGraph = {
         { target: "warehouse_logistics", relation: "发货履约" },
         { target: "kol_general", relation: "达人合作" },
       ],
+      resources: [
+        { title: "反淘卖家的本质工作", url: "https://xcn8pgdlg8x0.feishu.cn/wiki/FZwcwcigUizjgrkCGnvcaZrXnji" },
+        { title: "反向海淘财务模型", url: "https://xcn8pgdlg8x0.feishu.cn/wiki/KnXlwN0caiM8PIkloQPcqRaznSe" },
+        { title: "出单后的复盘指标", url: "https://xcn8pgdlg8x0.feishu.cn/wiki/AL45w4XuziV1X1kftMEcEk8TnVb" },
+      ],
     },
     {
       id: "warehouse_logistics",
@@ -168,6 +215,10 @@ export const DEFAULT_EXPLORE_GRAPH: ExploreGraph = {
         { target: "seller_distributor", relation: "卖家发货" },
         { target: "agent_platform", relation: "平台集运" },
       ],
+      resources: [
+        { title: "集运与合箱", url: "https://xcn8pgdlg8x0.feishu.cn/wiki/Fnxpwxl4xirdYfkBfNucdOBVnVJ" },
+        { title: "商家与采购履约流程", url: "https://xcn8pgdlg8x0.feishu.cn/wiki/Nemyw0zsOiPWSLkhJi7cZ5P6nwh" },
+      ],
     },
     {
       id: "qc_inspection",
@@ -178,6 +229,10 @@ export const DEFAULT_EXPLORE_GRAPH: ExploreGraph = {
       connections: [
         { target: "warehouse_logistics", relation: "入库环节" },
         { target: "agent_platform", relation: "平台增值服务" },
+      ],
+      resources: [
+        { title: "QC 图是什么", url: "https://xcn8pgdlg8x0.feishu.cn/wiki/OGm8woJvNiV7zUkz2oQcqaP4nve" },
+        { title: "商家与采购履约流程", url: "https://xcn8pgdlg8x0.feishu.cn/wiki/Nemyw0zsOiPWSLkhJi7cZ5P6nwh" },
       ],
     },
     {
@@ -191,6 +246,9 @@ export const DEFAULT_EXPLORE_GRAPH: ExploreGraph = {
         { target: "standalone_site", relation: "独立站支付" },
         { target: "seller_distributor", relation: "卖家提现" },
       ],
+      resources: [
+        { title: "客服 / 支付 / 风控流程", url: "https://xcn8pgdlg8x0.feishu.cn/wiki/H1Mlwdf55iXY0ukAvCHcaCYHnrh" },
+      ],
     },
     {
       id: "domestic_api",
@@ -203,6 +261,9 @@ export const DEFAULT_EXPLORE_GRAPH: ExploreGraph = {
         { target: "agent_platform", relation: "商品同步" },
         { target: "standalone_site", relation: "一键铺货" },
       ],
+      resources: [
+        { title: "Yupoo / 微店 / 淘宝 / 1688 关系", url: "https://xcn8pgdlg8x0.feishu.cn/wiki/Se6tw6XNSiWpOjk6aVJc0eI3nUe" },
+      ],
     },
     {
       id: "supply_chain_upstream",
@@ -214,6 +275,10 @@ export const DEFAULT_EXPLORE_GRAPH: ExploreGraph = {
         { target: "seller_distributor", relation: "直供" },
         { target: "ecom_platform", relation: "平台供货" },
       ],
+      resources: [
+        { title: "反向海淘财务模型", url: "https://xcn8pgdlg8x0.feishu.cn/wiki/KnXlwN0caiM8PIkloQPcqRaznSe" },
+        { title: "定价模型", url: "https://xcn8pgdlg8x0.feishu.cn/wiki/FloQw03LaiXCLxkD2rAcKrE3nAe" },
+      ],
     },
     {
       id: "currency_tax",
@@ -224,6 +289,10 @@ export const DEFAULT_EXPLORE_GRAPH: ExploreGraph = {
       connections: [
         { target: "payment_api", relation: "结算环节" },
         { target: "warehouse_logistics", relation: "清关" },
+      ],
+      resources: [
+        { title: "客服 / 支付 / 风控流程", url: "https://xcn8pgdlg8x0.feishu.cn/wiki/H1Mlwdf55iXY0ukAvCHcaCYHnrh" },
+        { title: "反向海淘财务模型", url: "https://xcn8pgdlg8x0.feishu.cn/wiki/KnXlwN0caiM8PIkloQPcqRaznSe" },
       ],
     },
   ],

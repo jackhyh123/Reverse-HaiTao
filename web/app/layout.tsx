@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import GlobalMobileHeader from "@/components/GlobalMobileHeader";
 import ThemeScript from "@/components/ThemeScript";
 import { AppShellProvider } from "@/context/AppShellContext";
 import { AuthProvider } from "@/context/AuthContext";
@@ -34,6 +35,7 @@ export default function RootLayout({
       </head>
       <body className="font-sans bg-[var(--background)] text-[var(--foreground)]">
         <AppShellProvider>
+          <GlobalMobileHeader />
           <AuthProvider>
             <I18nClientBridge>{children}</I18nClientBridge>
           </AuthProvider>

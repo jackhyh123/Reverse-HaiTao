@@ -193,7 +193,7 @@ export default function AdminOverviewPage() {
         <Card
           icon={<Database className="h-5 w-5" />}
           title={t("admin.overview.kbTitle")}
-          href="/knowledge"
+          href="/admin/knowledge-bases"
           hrefLabel={t("admin.overview.kbManage")}
         >
           {kbList.length ? (

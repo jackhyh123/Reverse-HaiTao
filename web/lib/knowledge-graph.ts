@@ -1,6 +1,7 @@
 "use client";
 
 import { apiUrl } from "@/lib/api";
+import type { FlowStageId } from "@/lib/ecosystem-data";
 
 export interface LocalizedText {
   zh: string;
@@ -39,6 +40,8 @@ export interface GraphNode {
   resources?: NodeResource[];
   position?: { x: number; y: number };
   practical_task?: PracticalTask;
+  /** Explicit 5-stage classification. Falls back to keyword matching if absent. */
+  stage_ids?: FlowStageId[];
 }
 
 export interface TaskEvalResult {
@@ -204,10 +207,16 @@ export async function tutor(
   nodeId: string,
   messages: Array<{ role: "assistant" | "user"; content: string }>,
   viewedResources?: Array<{ url: string; title: string; viewedAt: number }>,
+  nodeMeta?: { node_title?: string; node_summary?: string; node_mastery_criteria?: string },
 ): Promise<{ reply: string; mastery_signal: boolean }> {
   const body: Record<string, unknown> = { node_id: nodeId, messages };
   if (viewedResources && viewedResources.length > 0) {
     body.viewed_resources = viewedResources;
+  }
+  if (nodeMeta) {
+    if (nodeMeta.node_title) body.node_title = nodeMeta.node_title;
+    if (nodeMeta.node_summary) body.node_summary = nodeMeta.node_summary;
+    if (nodeMeta.node_mastery_criteria) body.node_mastery_criteria = nodeMeta.node_mastery_criteria;
   }
   const r = await fetch(apiUrl("/api/v1/knowledge-graph/tutor"), {
     ...COMMON,

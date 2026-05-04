@@ -277,6 +277,50 @@ export default function InlineResourceReader({
   breadcrumbStack,
   onBreadcrumbClick,
 }: InlineResourceReaderProps) {
+  // ── Feishu URL: show simplified "view original" card ──
+  const isFeishuUrl = useMemo(() => url.includes("feishu.cn"), [url]);
+
+  if (isFeishuUrl) {
+    return (
+      <div className="absolute inset-x-4 bottom-20 z-50 flex items-center justify-center md:inset-x-10 md:bottom-6">
+        <div
+          className="w-full max-w-lg rounded-[22px] border-[2.5px] border-[var(--border)]/50 bg-[var(--background)] p-6 shadow-[0_12px_48px_rgba(15,23,42,0.15)]"
+          style={{ boxShadow: "inset 0 1px 0 rgba(255,255,255,0.5), 0 12px 48px rgba(15,23,42,0.15)" }}
+        >
+          <div className="flex items-start justify-between gap-4">
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
+                <ExternalLink className="h-3.5 w-3.5" />
+                飞书文档
+              </div>
+              <h3 className="mt-1 text-base font-bold text-[var(--foreground)] line-clamp-2">
+                {title}
+              </h3>
+              <p className="mt-2 text-xs text-[var(--muted-foreground)] leading-relaxed">
+                此文档托管在飞书上，建议在新标签页中打开以获得最佳阅读体验。
+              </p>
+              <a
+                href={url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-4 inline-flex items-center gap-2 rounded-xl bg-[var(--primary)] px-5 py-2.5 text-sm font-bold text-[var(--primary-foreground)] shadow-sm transition-all hover:opacity-90 active:scale-[0.98]"
+              >
+                查看飞书原文
+                <ExternalLink className="h-4 w-4" />
+              </a>
+            </div>
+            <button
+              onClick={onClose}
+              className="shrink-0 rounded-xl p-1.5 text-[var(--muted-foreground)] hover:bg-[var(--secondary)]/40"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   const [feishuBlocks, setFeishuBlocks] = useState<FeishuBlock[]>([]);
   const [pageTitle, setPageTitle] = useState("");
   const [loading, setLoading] = useState(true);

@@ -89,6 +89,10 @@ class TutorPayload(BaseModel):
     node_id: str
     messages: list[DiagnoseMessage] = []
     viewed_resources: list[ResourceViewMeta] = []
+    # Fallback metadata for dynamic/personalized nodes not in the static graph
+    node_title: str = ""
+    node_summary: str = ""
+    node_mastery_criteria: str = ""
 
 
 class AskPayload(BaseModel):
@@ -112,6 +116,11 @@ class BatchAdoptPayload(BaseModel):
 class EvaluateTaskPayload(BaseModel):
     node_id: str
     task_answer: str
+
+
+class DiagnosticQuizPayload(BaseModel):
+    """Multi-turn diagnostic quiz conversation."""
+    messages: list[DiagnoseMessage] = []
 
 
 # ─── CRUD ────────────────────────────────────────────────────────────────
@@ -566,19 +575,32 @@ async def tutor(
 ) -> dict[str, Any]:
     graph = load_antitao_knowledge_graph()
     node = get_node_by_id(graph, payload.node_id)
-    if not node:
+
+    # Fallback: use payload metadata for dynamic/personalized nodes not in the static graph
+    title = payload.node_title or (node["title"]["zh"] if node else "")
+    summary = payload.node_summary or (node["summary"]["zh"] if node else "")
+    mastery_criteria = payload.node_mastery_criteria or (
+        node.get("mastery_criteria", {}).get("zh", "") if node else ""
+    )
+    validation_questions = (
+        [q["zh"] for q in node.get("validation_questions", [])]
+        if node else []
+    )
+
+    if not node and not payload.node_title:
         raise HTTPException(status_code=404, detail="node_not_found")
 
-    resources = node.get("resources", [])
     resources_section = ""
-    if resources:
-        lines = ["可引用的学习资源（如有需要请提及）："]
-        for r in resources:
-            title = r.get("title", {}).get("zh", "")
-            url = r.get("url", "")
-            summary = r.get("summary", {}).get("zh", "")
-            lines.append(f"  · [{r.get('type', 'doc')}] {title} — {summary} ({url})")
-        resources_section = "\n" + "\n".join(lines) + "\n"
+    if node:
+        resources = node.get("resources", [])
+        if resources:
+            lines = ["可引用的学习资源（如有需要请提及）："]
+            for r in resources:
+                rtitle = r.get("title", {}).get("zh", "")
+                url = r.get("url", "")
+                rsummary = r.get("summary", {}).get("zh", "")
+                lines.append(f"  · [{r.get('type', 'doc')}] {rtitle} — {rsummary} ({url})")
+            resources_section = "\n" + "\n".join(lines) + "\n"
 
     viewed_resources_section = ""
     if payload.viewed_resources:
@@ -588,10 +610,10 @@ async def tutor(
         viewed_resources_section = "\n" + "\n".join(lines) + "\n"
 
     system_prompt = _TUTOR_SYSTEM_TEMPLATE.format(
-        title=node["title"]["zh"],
-        summary=node["summary"]["zh"],
-        mastery_criteria=node.get("mastery_criteria", {}).get("zh", ""),
-        validation_questions=[q["zh"] for q in node.get("validation_questions", [])],
+        title=title,
+        summary=summary,
+        mastery_criteria=mastery_criteria,
+        validation_questions=validation_questions,
         resources_section=resources_section,
         viewed_resources_section=viewed_resources_section,
     )
@@ -625,6 +647,149 @@ async def tutor(
         "reply": cleaned,
         "mastery_signal": mastery_signal,
     }
+
+
+# ─── Diagnostic Quiz: forced onboarding assessment for /learn ────────────
+
+
+_DIAGNOSTIC_QUIZ_SYSTEM = """你是反淘知识图谱的「诊断导师」。你的唯一任务是：通过选择题诊断用户的反淘知识水平，然后生成个性化的学习节点。
+
+## 你的角色
+- 友好、鼓励性的导师语气
+- 每次只问一个问题，给4个选项（A/B/C/D）
+- 根据用户的选择动态调整后续问题难度
+- 3-5个问题后判断水平并生成学习路径
+
+## 水平定义
+- **新手（beginner）**：不了解反淘基本概念，不知道核心角色
+- **有基础（intermediate）**：了解基本概念和角色，但缺乏具体操作知识
+- **进阶（advanced）**：有实际操作经验，需要深入策略和优化
+
+## 问题设计原则
+- 第1题：询问用户背景（"你之前了解反淘吗？"），据此决定后续难度
+- 新手路线：问概念题（"反淘是什么？"→"谁在反淘里做什么？"）
+- 有基础路线：问操作题（"卖家怎么选渠道？"→"代理平台怎么收费？"）
+- 进阶路线：问策略题（"怎么优化转化率？"→"怎么判断渠道ROI？"）
+- 如果用户选错基础概念，降低后续问题难度
+
+## 输出格式（严格遵守）
+
+每次回复必须是合法的 JSON 对象，不要输出任何 JSON 之外的文字。
+
+**正在出题时：**
+```json
+{
+  "phase": "question",
+  "reply": "你的问题文字（包含选项，用 A/B/C/D 标记，每选项一行）",
+  "question_number": 2,
+  "total_questions_estimate": 4
+}
+```
+
+**诊断完成时：**
+```json
+{
+  "phase": "complete",
+  "reply": "总结文字，告诉用户他的水平和推荐的学习路径（2-3句话）",
+  "diagnostic_result": {
+    "level": "beginner|intermediate|advanced",
+    "level_label": "新手|有基础|进阶",
+    "suggested_track": "seller|operator",
+    "summary": "一句话概括用户水平",
+    "personalized_nodes": [
+      {
+        "id": "custom_diag_1",
+        "title": {"zh": "节点中文标题", "en": "Node English Title"},
+        "summary": {"zh": "一句话描述这个节点要学什么", "en": "One-line description"},
+        "mastery_criteria": {"zh": "掌握标准描述", "en": "Mastery criteria"},
+        "estimated_minutes": 10,
+        "prerequisites": [],
+        "tags": ["diagnostic"],
+        "track_ids": ["seller"]
+      }
+    ]
+  }
+}
+```
+
+## 个性化节点生成规则
+1. 每个用户生成 4-7 个学习节点
+2. 新手节点：从概念入手，逐步深入（"反淘是什么"→"核心角色"→"简单操作"）
+3. 有基础节点：从操作入手，补充策略（"渠道选择"→"转化优化"→"数据分析"）
+4. 进阶节点：从策略入手，深入专业领域（"多平台布局"→"供应链优化"→"规模化增长"）
+5. 节点之间必须有清晰的先后关系（prerequisites）
+6. 节点标题用中文口语化表达，不要学术腔
+7. 每个节点有清晰的 mastery_criteria（用户学完后应该能用自己话说清什么）
+
+## 重要提醒
+- 第一次回复时，phase 必须是 "question"，直接开始出题
+- 不要在 question_number=1 之前出 introductory 文字，直接在 reply 中打招呼+出题
+- 问完足够的问题后（至少3个），phase 切换为 "complete"
+- 所有回复都必须是纯 JSON，不要有 markdown 代码块包裹"""
+
+
+@router.post("/diagnostic-quiz")
+async def diagnostic_quiz(
+    payload: DiagnosticQuizPayload,
+    _user: UserInfo | None = Depends(get_optional_user),
+) -> dict[str, Any]:
+    """Multi-turn diagnostic quiz that assesses user level and generates personalized learning nodes.
+
+    The AI asks 3-5 multiple-choice questions, then outputs a personalized
+    set of learning nodes tailored to the user's knowledge level.
+    """
+    graph = load_antitao_knowledge_graph()
+
+    # Build compact graph context for the AI
+    nodes_summary = []
+    for n in graph.get("nodes", []):
+        nodes_summary.append({
+            "id": n["id"],
+            "title": n["title"]["zh"],
+            "summary": n.get("summary", {}).get("zh", ""),
+            "track_ids": n.get("track_ids", []),
+            "tags": n.get("tags", []),
+        })
+
+    graph_context = json.dumps({
+        "available_tracks": [
+            {"id": t["id"], "label": t["label"]["zh"]}
+            for t in graph.get("tracks", [])
+        ],
+        "existing_nodes": nodes_summary,
+    }, ensure_ascii=False, indent=2)
+
+    # Build messages
+    api_messages: list[dict[str, Any]] = [
+        {"role": "system", "content": _DIAGNOSTIC_QUIZ_SYSTEM},
+        {"role": "user", "content": f"以下是现有知识图谱的参考数据（你可以参考其中的节点来避免重复生成）：\n\n{graph_context}\n\n现在请开始诊断。先简短打招呼并出第1道选择题。"},
+    ]
+
+    if payload.messages:
+        for m in payload.messages:
+            api_messages.append({"role": m.role, "content": m.content})
+
+    try:
+        text = await llm_complete(
+            prompt="",
+            system_prompt=_DIAGNOSTIC_QUIZ_SYSTEM,
+            messages=api_messages,
+        )
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"llm_error: {e}")
+
+    parsed = _safe_parse_json(text or "")
+    if not parsed or "phase" not in parsed:
+        # Fallback: treat as a question
+        return {
+            "phase": "question",
+            "reply": (text or "").strip() or "让我来问你第一个问题：你之前了解过反淘（反向海淘）吗？\n\nA. 完全不了解，刚接触\nB. 听说过，但不清楚具体是什么\nC. 了解基本概念和主要角色\nD. 有实际操作经验",
+            "question_number": 1,
+            "total_questions_estimate": 4,
+            "raw": text,
+        }
+
+    return parsed
 
 
 # ─── Free-form Q&A about reverse cross-border (general 反淘 tutor) ──────

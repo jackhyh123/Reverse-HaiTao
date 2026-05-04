@@ -277,7 +277,7 @@ export default function BookProgressTimeline({
           <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-[var(--border)] pt-2.5 text-[11px]">
             {counters.map((item) => (
               <div
-                key={item.label}
+                key={item.labelKey}
                 className="inline-flex items-baseline gap-1 text-[var(--muted-foreground)]"
               >
                 <span className="font-semibold tabular-nums text-[var(--foreground)]">
