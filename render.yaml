@@ -1,0 +1,51 @@
+services:
+  - type: web
+    name: reverse-haitao-backend
+    runtime: docker
+    dockerfilePath: ./Dockerfile.backend
+    plan: free
+    envVars:
+      - key: LLM_BINDING
+        value: deepseek
+      - key: LLM_MODEL
+        value: deepseek-chat
+      - key: LLM_API_KEY
+        sync: false
+      - key: LLM_HOST
+        value: https://api.deepseek.com
+      - key: EMBEDDING_BINDING
+        value: custom
+      - key: EMBEDDING_MODEL
+        value: text-embedding-3-large
+      - key: EMBEDDING_API_KEY
+        sync: false
+      - key: EMBEDDING_HOST
+        value: https://api.getgoapi.com/v1
+      - key: EMBEDDING_DIMENSION
+        value: "3072"
+      - key: ADMIN_EMAILS
+        value: hyhlovehy@gmail.com,hyhlovehy2@gmail.com,qw3547022@vip.qq.com
+      - key: AUTH_BYPASS_OTP
+        value: "true"
+      - key: SESSION_TTL_SECONDS
+        value: "2592000"
+      - key: SMTP_PROVIDER
+        value: resend
+      - key: SMTP_FROM_NAME
+        value: 反淘淘金通关系统
+      - key: SMTP_USER
+        value: onboarding@resend.dev
+      - key: RESEND_API_KEY
+        sync: false
+      - key: ANTITAO_KB_AUTO_SYNC
+        value: "true"
+      - key: ANTITAO_KB_SYNC_INTERVAL_SECONDS
+        value: "300"
+      - key: ANTITAO_FEISHU_APP_ID
+        value: cli_a95cc1dc10b89bb5
+      - key: ANTITAO_FEISHU_APP_SECRET
+        sync: false
+      - key: ANTITAO_FEISHU_APP_TOKEN
+        sync: false
+      - key: ANTITAO_FEISHU_BASE_LINK
+        value: https://xcn8pgdlg8x0.feishu.cn/base/HBq8bRILLaGwNPssyxdcjFdkn4c?from=from_copylink
