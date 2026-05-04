@@ -1,6 +1,6 @@
 "use client";
 
-import { ExternalLink, FileText, FolderOpen } from "lucide-react";
+import { Crown, ExternalLink, FileText, FolderOpen, Lock } from "lucide-react";
 import type { NodeResource } from "@/lib/knowledge-graph";
 
 type LocaleKey = "zh" | "en";
@@ -15,17 +15,24 @@ export function uniqueResources(resources: NodeResource[]): NodeResource[] {
   });
 }
 
+/** Sort: free resources first, premium at bottom */
+function sortResources(resources: NodeResource[]): NodeResource[] {
+  return resources.slice().sort((a, b) => (a.is_premium ? 1 : 0) - (b.is_premium ? 1 : 0));
+}
+
 export function ResourceDesktop({
   locale,
   leftResources,
   rightResources,
   rightTitle,
+  isPremiumUser,
   onOpenResource,
 }: {
   locale: LocaleKey;
   leftResources: NodeResource[];
   rightResources: NodeResource[];
   rightTitle?: string;
+  isPremiumUser?: boolean;
   onOpenResource?: (url: string, title: string) => void;
 }) {
   return (
@@ -34,16 +41,18 @@ export function ResourceDesktop({
         locale={locale}
         title={locale === "zh" ? "开始前必读" : "Start Here"}
         subtitle={locale === "zh" ? "先校准概念，再进入节点" : "Calibrate the basics before nodes"}
-        resources={leftResources}
+        resources={sortResources(leftResources)}
         align="left"
+        isPremiumUser={isPremiumUser}
         onOpenResource={onOpenResource}
       />
       <ResourceStack
         locale={locale}
         title={rightTitle || (locale === "zh" ? "当前路径资料" : "Track Files")}
         subtitle={rightTitle ? (locale === "zh" ? "当前节点的资料" : "Current node files") : (locale === "zh" ? "点击节点后切换资料" : "Click a node to switch files")}
-        resources={rightResources}
+        resources={sortResources(rightResources)}
         align="right"
+        isPremiumUser={isPremiumUser}
         onOpenResource={onOpenResource}
       />
     </div>
@@ -56,6 +65,7 @@ export function ResourceStack({
   subtitle,
   resources,
   align,
+  isPremiumUser,
   onOpenResource,
 }: {
   locale: LocaleKey;
@@ -63,6 +73,7 @@ export function ResourceStack({
   subtitle: string;
   resources: NodeResource[];
   align: "left" | "right";
+  isPremiumUser?: boolean;
   onOpenResource?: (url: string, title: string) => void;
 }) {
   if (resources.length === 0) return null;
@@ -84,10 +95,17 @@ export function ResourceStack({
       <div className="space-y-2">
         {resources.map((resource, index) => {
           const isFeishu = resource.url?.includes("feishu.cn");
+          const isPremium = !!resource.is_premium;
+          const isLocked = isPremium && !isPremiumUser;
+
           return (
             <button
               key={`${resource.url}-${resource.title[locale]}`}
               onClick={() => {
+                if (isLocked) {
+                  window.location.href = "/membership";
+                  return;
+                }
                 if (isFeishu) {
                   window.open(resource.url, "_blank", "noopener,noreferrer");
                 } else {
@@ -98,18 +116,33 @@ export function ResourceStack({
               style={{ transform: `rotate(${align === "left" ? -1.5 + index * 1.2 : 1.5 - index * 1.1}deg)` }}
             >
               <div className={`relative overflow-hidden rounded-2xl border border-[var(--border)]/45 bg-[var(--background)]/86 p-2.5 shadow-sm transition-all duration-200 group-hover:-translate-y-1 group-hover:shadow-xl dark:bg-slate-900/86 lg:p-3 ${
-                isFeishu
+                isLocked
+                  ? "opacity-55 group-hover:opacity-75"
+                  : isFeishu
                   ? "opacity-70 group-hover:opacity-90 group-hover:border-[var(--border)]/60"
                   : "group-hover:border-[var(--primary)]/50"
               }`}>
-                <div className={`absolute right-0 top-0 h-8 w-8 rounded-bl-2xl ${isFeishu ? "bg-slate-100 dark:bg-slate-700/30" : "bg-amber-100 dark:bg-amber-300/20"}`} />
+                <div className={`absolute right-0 top-0 h-8 w-8 rounded-bl-2xl ${
+                  isLocked
+                    ? "bg-slate-100 dark:bg-slate-700/30"
+                    : isFeishu
+                    ? "bg-slate-100 dark:bg-slate-700/30"
+                    : "bg-amber-100 dark:bg-amber-300/20"
+                }`} />
                 <div className="flex items-start gap-2">
-                  <FileText className={`mt-0.5 h-4 w-4 shrink-0 ${isFeishu ? "text-[var(--muted-foreground)]" : "text-[var(--primary)]"}`} />
+                  <FileText className={`mt-0.5 h-4 w-4 shrink-0 ${
+                    isLocked ? "text-[var(--muted-foreground)]" : isFeishu ? "text-[var(--muted-foreground)]" : "text-[var(--primary)]"
+                  }`} />
                   <div className="min-w-0 flex-1">
                     <div className="line-clamp-2 text-xs font-black leading-5">
                       {resource.title[locale]}
                     </div>
-                    {isFeishu ? (
+                    {isLocked ? (
+                      <div className="mt-1 inline-flex items-center gap-1 text-[10px] text-amber-600 font-medium">
+                        <Lock className="h-3 w-3" />
+                        Premium 资源
+                      </div>
+                    ) : isFeishu ? (
                       <div className="mt-1 inline-flex items-center gap-1 text-[10px] text-[var(--muted-foreground)]">
                         <ExternalLink className="h-3 w-3" />
                         查看飞书原文
@@ -120,7 +153,11 @@ export function ResourceStack({
                       </div>
                     )}
                   </div>
-                  <ExternalLink className={`mt-0.5 h-3.5 w-3.5 shrink-0 ${isFeishu ? "text-[var(--muted-foreground)]" : "text-[var(--muted-foreground)] opacity-60 transition-opacity group-hover:opacity-100"}`} />
+                  {isPremium && !isLocked ? (
+                    <Crown className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-500" />
+                  ) : (
+                    <ExternalLink className={`mt-0.5 h-3.5 w-3.5 shrink-0 ${isLocked || isFeishu ? "text-[var(--muted-foreground)]" : "text-[var(--muted-foreground)] opacity-60 transition-opacity group-hover:opacity-100"}`} />
+                  )}
                 </div>
               </div>
             </button>

@@ -10,8 +10,10 @@ import {
   ChevronLeft,
   ChevronRight,
   ClipboardCheck,
+  Crown,
   ExternalLink,
   Loader2,
+  Lock,
   Send,
   Sparkles,
   Target,
@@ -66,6 +68,8 @@ interface NodeDetailPanelProps {
   currentFocus?: FocusDirectionId;
   /** Stage definition (for header badge) */
   stageDef?: FlowStageDef;
+  /** Whether the current user has premium access */
+  isPremiumUser?: boolean;
 }
 
 const tutorStorageKey = (nodeId: string) => `learn_node_tutor_messages_${nodeId}`;
@@ -86,6 +90,7 @@ export default function NodeDetailPanel({
   currentStage,
   currentFocus: _currentFocus,
   stageDef,
+  isPremiumUser,
 }: NodeDetailPanelProps) {
   const hasResources = (node.resources?.length || 0) > 0;
   const [tab, setTab] = useState<Tab>(hasResources ? "resources" : "tutor");
@@ -452,15 +457,20 @@ export default function NodeDetailPanel({
           <div className="h-full overflow-y-auto p-5">
             {hasResources ? (
               <ul className="space-y-3">
-                {(node.resources || []).map((r, i) => (
-                  <ResourceItem
-                    key={i}
-                    resource={r}
-                    locale={locale}
-                    nodeId={node.id}
-                    onOpenReader={(url, title) => { setReaderUrl(url); setReaderTitle(title); setReaderStack([]); }}
-                  />
-                ))}
+                {/* Sort: free resources first, premium at bottom */}
+                {(node.resources || [])
+                  .slice()
+                  .sort((a, b) => (a.is_premium ? 1 : 0) - (b.is_premium ? 1 : 0))
+                  .map((r, i) => (
+                    <ResourceItem
+                      key={i}
+                      resource={r}
+                      locale={locale}
+                      nodeId={node.id}
+                      isPremiumUser={isPremiumUser}
+                      onOpenReader={(url, title) => { setReaderUrl(url); setReaderTitle(title); setReaderStack([]); }}
+                    />
+                  ))}
               </ul>
             ) : (
               <div className="rounded-[20px] border-2 border-dashed border-[var(--border)]/50 bg-[var(--card)]/80 p-6 text-center"
@@ -831,56 +841,86 @@ function ResourceItem({
   resource,
   locale,
   nodeId,
+  isPremiumUser,
   onOpenReader,
 }: {
   resource: NodeResource;
   locale: LocaleKey;
   nodeId?: string;
+  isPremiumUser?: boolean;
   onOpenReader?: (url: string, title: string) => void;
 }) {
-  const typeColor =
-    resource.type === "article"
-      ? "bg-blue-100 text-blue-700"
-      : resource.type === "doc"
-      ? "bg-purple-100 text-purple-700"
-      : resource.type === "video"
-      ? "bg-rose-100 text-rose-700"
-      : "bg-slate-100 text-slate-700";
+  const isPremium = !!resource.is_premium;
+  const isLocked = isPremium && !isPremiumUser;
+
+  const typeColor = isLocked
+    ? "bg-slate-100 text-slate-400"
+    : resource.type === "article"
+    ? "bg-blue-100 text-blue-700"
+    : resource.type === "doc"
+    ? "bg-purple-100 text-purple-700"
+    : resource.type === "video"
+    ? "bg-rose-100 text-rose-700"
+    : "bg-slate-100 text-slate-700";
 
   const handleClick = (e: React.MouseEvent) => {
+    if (isLocked) {
+      e.preventDefault();
+      window.location.href = "/membership";
+      return;
+    }
     if (nodeId) {
       recordResourceView(nodeId, resource.url, resource.title[locale]);
     }
-    // Ctrl/Meta+click or right-click → let browser handle (new tab)
     if (e.ctrlKey || e.metaKey || e.button !== 0) return;
-    // Normal click → open inline reader
     e.preventDefault();
     onOpenReader?.(resource.url, resource.title[locale]);
   };
 
+  const cardClass = isLocked
+    ? "block rounded-[18px] border-2 border-[var(--border)]/30 bg-[var(--card)]/50 p-3.5 transition-all duration-200 cursor-pointer opacity-60 hover:opacity-80"
+    : "block rounded-[18px] border-2 border-[var(--border)]/40 bg-[var(--card)]/90 p-3.5 transition-all duration-200 hover:border-[var(--primary)]/60 hover:-translate-y-0.5 cursor-pointer";
+
   return (
     <li>
       <a
-        href={resource.url}
-        target="_blank"
-        rel="noopener noreferrer"
+        href={isLocked ? "/membership" : resource.url}
+        target={isLocked ? "_self" : "_blank"}
+        rel={isLocked ? undefined : "noopener noreferrer"}
         onClick={handleClick}
-        className="block rounded-[18px] border-2 border-[var(--border)]/40 bg-[var(--card)]/90 p-3.5 transition-all duration-200 hover:border-[var(--primary)]/60 hover:-translate-y-0.5 cursor-pointer"
-        style={{ boxShadow: "inset 0 1px 0 rgba(255,255,255,0.5), 0 2px 8px rgba(120,100,80,0.04)" }}
+        className={cardClass}
+        style={{ boxShadow: isLocked ? "none" : "inset 0 1px 0 rgba(255,255,255,0.5), 0 2px 8px rgba(120,100,80,0.04)" }}
       >
         <div className="flex items-center gap-2">
           <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase ${typeColor}`}>
             {resource.type}
           </span>
-          <span className="flex-1 text-sm font-semibold">
+          <span className={`flex-1 text-sm font-semibold ${isLocked ? "text-[var(--muted-foreground)]" : ""}`}>
             {resource.title[locale]}
           </span>
-          <ExternalLink className="h-3.5 w-3.5 text-[var(--muted-foreground)]" />
+          {isPremium && (
+            isLocked ? (
+              <span className="inline-flex items-center gap-1 rounded-md bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700">
+                <Lock className="h-3 w-3" />
+                Premium
+              </span>
+            ) : (
+              <Crown className="h-3.5 w-3.5 text-amber-500" />
+            )
+          )}
+          {!isPremium && (
+            <ExternalLink className="h-3.5 w-3.5 text-[var(--muted-foreground)]" />
+          )}
         </div>
         {resource.summary && (
-          <p className="mt-1 text-xs text-[var(--muted-foreground)]">
+          <p className={`mt-1 text-xs ${isLocked ? "text-[var(--muted-foreground)]/60" : "text-[var(--muted-foreground)]"}`}>
             {resource.summary[locale]}
           </p>
+        )}
+        {isLocked && (
+          <div className="mt-2 text-[10px] text-amber-600 font-medium">
+            🔒 升级 Premium 解锁此资源
+          </div>
         )}
       </a>
     </li>

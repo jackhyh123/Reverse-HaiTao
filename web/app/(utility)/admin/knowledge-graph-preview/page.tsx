@@ -213,6 +213,7 @@ export default function AdminKnowledgeGraphPreviewPage() {
               locale={locale}
               isMastered={masteredIds.has(selectedNode.id)}
               isLoggedIn={!!selectedEmail}
+              isPremiumUser={true /* admin preview: see all resources */}
               onClose={() => setSelectedNode(null)}
               onMarkMastered={async () => {
                 // Preview mode: don't actually modify progress

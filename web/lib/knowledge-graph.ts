@@ -19,6 +19,7 @@ export interface NodeResource {
   title: LocalizedText;
   url: string;
   summary?: LocalizedText;
+  is_premium?: boolean; // undefined = 免费，管理员可在知识库中标记付费资源
 }
 
 export interface PracticalTask {

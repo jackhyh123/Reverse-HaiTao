@@ -35,6 +35,7 @@ class MemberStore:
     def __init__(self, db_path: Path | None = None):
         self.db_path = db_path or _resolve_db_path()
         self._init_db()
+        self._migrate_is_premium()
 
     def _conn(self) -> sqlite3.Connection:
         conn = sqlite3.connect(str(self.db_path), timeout=10, isolation_level=None)
@@ -53,7 +54,8 @@ class MemberStore:
                     last_login_at REAL NOT NULL,
                     login_count INTEGER NOT NULL DEFAULT 0,
                     status TEXT NOT NULL DEFAULT 'active',
-                    note TEXT DEFAULT ''
+                    note TEXT DEFAULT '',
+                    is_premium INTEGER NOT NULL DEFAULT 0
                 );
                 CREATE INDEX IF NOT EXISTS idx_members_last_login
                     ON members(last_login_at DESC);
@@ -218,6 +220,55 @@ class MemberStore:
                 "UPDATE members SET status = ? WHERE email = ?",
                 (status, email.strip().lower()),
             )
+
+    def create_member(
+        self, email: str, status: str = "active", is_premium: bool = False
+    ) -> dict[str, Any]:
+        email = email.strip().lower()
+        now = time.time()
+        with self._conn() as c:
+            existing = c.execute(
+                "SELECT * FROM members WHERE email = ?", (email,)
+            ).fetchone()
+            if existing:
+                raise ValueError("member_exists")
+            c.execute(
+                "INSERT INTO members (email, created_at, last_login_at, login_count, status, is_premium) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                (email, now, now, 0, status, 1 if is_premium else 0),
+            )
+            row = c.execute(
+                "SELECT * FROM members WHERE email = ?", (email,)
+            ).fetchone()
+        return dict(row) if row else {}
+
+    def delete_member(self, email: str) -> bool:
+        email = email.strip().lower()
+        with self._conn() as c:
+            cur = c.execute("DELETE FROM members WHERE email = ?", (email,))
+        return cur.rowcount > 0
+
+    def toggle_premium(self, email: str, is_premium: bool) -> dict[str, Any] | None:
+        email = email.strip().lower()
+        with self._conn() as c:
+            c.execute(
+                "UPDATE members SET is_premium = ? WHERE email = ?",
+                (1 if is_premium else 0, email),
+            )
+            row = c.execute(
+                "SELECT * FROM members WHERE email = ?", (email,)
+            ).fetchone()
+        return dict(row) if row else None
+
+    def _migrate_is_premium(self) -> None:
+        """Add is_premium column if missing (for existing databases)."""
+        try:
+            with self._conn() as c:
+                cols = [r["name"] for r in c.execute("PRAGMA table_info(members)").fetchall()]
+                if "is_premium" not in cols:
+                    c.execute("ALTER TABLE members ADD COLUMN is_premium INTEGER NOT NULL DEFAULT 0")
+        except Exception:
+            pass
 
     # ─── activity ─────────────────────────────────────────────────────────
 

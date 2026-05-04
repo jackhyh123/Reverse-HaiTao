@@ -250,6 +250,7 @@ from deeptutor.api.routers import (
     system,
     tutorbot,
     unified_ws,
+    usage,
     vision_solver,
 )
 
@@ -288,6 +289,7 @@ app.include_router(
     prefix="/api/v1/admin",
     tags=["admin"],
 )
+app.include_router(usage.router, prefix="/api/v1/admin", tags=["admin"])
 app.include_router(
     knowledge_graph.router,
     prefix="/api/v1/knowledge-graph",

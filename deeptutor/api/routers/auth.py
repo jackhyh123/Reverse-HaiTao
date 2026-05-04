@@ -46,6 +46,7 @@ class UserInfo(BaseModel):
     email: str
     role: Literal["admin", "member"]
     is_admin: bool
+    is_premium: bool = False
     expires_at: float | None = None
 
 
@@ -60,10 +61,12 @@ def get_current_user(
     if not sess:
         raise HTTPException(status_code=401, detail="not_authenticated")
     role = sess.get("role") or "member"
+    is_premium = bool(get_member_store().get_member(sess["email"]) or {}).get("is_premium", False)
     return UserInfo(
         email=sess["email"],
         role=role,
         is_admin=role == "admin",
+        is_premium=is_premium,
         expires_at=sess.get("expires_at"),
     )
 
@@ -157,6 +160,7 @@ async def verify(
             "email": email,
             "role": role,
             "is_admin": role == "admin",
+            "is_premium": bool(member.get("is_premium", False)),
             "expires_at": new_sess["expires_at"],
             "member": member,
         }

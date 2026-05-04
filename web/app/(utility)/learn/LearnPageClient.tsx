@@ -535,6 +535,7 @@ export default function LearnPageClient() {
                   locale={locale}
                   isMastered={masteredIds.has(recommendation.node.id)}
                   isLoggedIn={!!user}
+                  isPremiumUser={!!user?.is_premium}
                   initialNotes={notesByNodeId.get(recommendation.node.id) || ""}
                   onClose={() => setSelectedNode(null)}
                   onMarkMastered={handleMarkMastered}
@@ -662,6 +663,7 @@ export default function LearnPageClient() {
                   locale={locale}
                   isMastered={masteredIds.has(selectedNode.id)}
                   isLoggedIn={!!user}
+                  isPremiumUser={!!user?.is_premium}
                   initialNotes={notesByNodeId.get(selectedNode.id) || ""}
                   onClose={() => setSelectedNode(null)}
                   onMarkMastered={handleMarkMastered}
@@ -717,6 +719,7 @@ export default function LearnPageClient() {
                   locale={locale}
                   isMastered={masteredIds.has(selectedNode.id)}
                   isLoggedIn={!!user}
+                  isPremiumUser={!!user?.is_premium}
                   initialNotes={notesByNodeId.get(selectedNode.id) || ""}
                   onClose={() => setSelectedNode(null)}
                   onMarkMastered={handleMarkMastered}

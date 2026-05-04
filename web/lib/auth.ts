@@ -6,6 +6,7 @@ export interface AuthUser {
   email: string;
   role: "admin" | "member";
   is_admin: boolean;
+  is_premium?: boolean;
   expires_at?: number | null;
 }
 
@@ -16,6 +17,7 @@ export interface AuthMember {
   login_count: number;
   status: string;
   note?: string;
+  is_premium?: number;
 }
 
 export interface AuthMeResponse {
