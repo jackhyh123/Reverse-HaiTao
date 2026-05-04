@@ -1,8 +1,5 @@
-[build]
-builder = "NIXPACKS"
-
 [deploy]
-startCommand = "python -m uvicorn deeptutor.api.main:app --host 0.0.0.0 --port ${PORT:-8001}"
+startCommand = "python -m uvicorn deeptutor.api.main:app --host 0.0.0.0 --port 8001"
 
 [service]
 port = 8001
