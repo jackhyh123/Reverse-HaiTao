@@ -42,6 +42,11 @@ class VerifyPayload(BaseModel):
     code: str
 
 
+class AdminLoginPayload(BaseModel):
+    email: str
+    password: str
+
+
 class UserInfo(BaseModel):
     email: str
     role: Literal["admin", "member"]
@@ -181,6 +186,59 @@ async def logout(
         store.delete(dt_session)
     response.delete_cookie(COOKIE_NAME, path="/")
     return {"success": True}
+
+
+@router.post("/admin-login")
+async def admin_login(
+    payload: AdminLoginPayload,
+    request: Request,
+    response: Response,
+) -> dict[str, Any]:
+    """Password-based login for admin users (no OTP)."""
+    email = payload.email.lower().strip()
+    admin_password = os.environ.get("AUTH_ADMIN_PASSWORD", "").strip()
+
+    if not admin_password:
+        raise HTTPException(status_code=501, detail="admin_login_not_configured")
+    if not is_admin_email(email):
+        raise HTTPException(status_code=403, detail="not_admin")
+    if payload.password != admin_password:
+        raise HTTPException(status_code=401, detail="invalid_credentials")
+
+    role: Literal["admin", "member"] = "admin"
+    members = get_member_store()
+    member = members.upsert_on_login(email)
+    members.log_activity(email, "admin_login")
+
+    sessions = get_auth_session_store()
+    new_sess = sessions.create(
+        email=email,
+        role=role,
+        ip=request.client.host if request.client else "",
+        user_agent=request.headers.get("user-agent", "")[:240],
+    )
+
+    response.set_cookie(
+        key=COOKIE_NAME,
+        value=new_sess["token"],
+        max_age=int(new_sess["expires_at"] - new_sess.get("created_at", 0))
+        if new_sess.get("created_at")
+        else 2592000,
+        httponly=True,
+        samesite="lax",
+        secure=False,
+        path="/",
+    )
+    return {
+        "user": {
+            "email": email,
+            "role": role,
+            "is_admin": True,
+            "is_premium": bool(member.get("is_premium", False)),
+            "expires_at": new_sess["expires_at"],
+            "member": member,
+        }
+    }
 
 
 @router.get("/me")

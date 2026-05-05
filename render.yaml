@@ -27,6 +27,8 @@ services:
         value: hyhlovehy@gmail.com,hyhlovehy2@gmail.com,qw3547022@vip.qq.com
       - key: AUTH_BYPASS_OTP
         value: "true"
+      - key: AUTH_ADMIN_PASSWORD
+        sync: false
       - key: SESSION_TTL_SECONDS
         value: "2592000"
       - key: SMTP_PROVIDER
