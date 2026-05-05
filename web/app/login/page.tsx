@@ -2,9 +2,9 @@
 
 import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Loader2, Mail, ShieldCheck } from "lucide-react";
+import { Loader2, Lock, Mail, ShieldCheck } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { authSendCode, authVerify } from "@/lib/auth";
+import { authLogin, authSendCode, authVerify } from "@/lib/auth";
 import { useAuth } from "@/context/AuthContext";
 
 /**
@@ -17,6 +17,8 @@ function computeSafeRedirect(next: string, isAdmin: boolean): string {
   return next;
 }
 
+type LoginMode = "password" | "otp";
+
 function LoginInner() {
   const { t } = useTranslation();
   const router = useRouter();
@@ -25,15 +27,24 @@ function LoginInner() {
   const reason = params.get("reason");
   const { user, loading, setSession } = useAuth();
 
+  const [mode, setMode] = useState<LoginMode>("password");
+
+  // ── password mode ──
   const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [loggingIn, setLoggingIn] = useState(false);
+
+  // ── OTP mode ──
+  const [otpEmail, setOtpEmail] = useState("");
   const [code, setCode] = useState("");
-  const [step, setStep] = useState<"email" | "code">("email");
+  const [otpStep, setOtpStep] = useState<"email" | "code">("email");
   const [sending, setSending] = useState(false);
   const [verifying, setVerifying] = useState(false);
-  const [message, setMessage] = useState<{ kind: "info" | "error" | "success"; text: string } | null>(null);
   const [devMode, setDevMode] = useState(false);
 
-  // 已登录直接跳走（注意：避免「→admin→login」死循环——非 admin 想去 admin 时改去 /learn）
+  const [message, setMessage] = useState<{ kind: "info" | "error" | "success"; text: string } | null>(null);
+
+  // 已登录直接跳走
   useEffect(() => {
     if (!loading && user) {
       const target = computeSafeRedirect(next, user.is_admin);
@@ -41,17 +52,45 @@ function LoginInner() {
     }
   }, [loading, user, router, next]);
 
-  const handleSendCode = async () => {
+  const clearMessage = () => setMessage(null);
+
+  // ── password login ──
+  const handlePasswordLogin = async () => {
     if (!email.trim()) {
+      setMessage({ kind: "error", text: t("login.emailRequired") });
+      return;
+    }
+    if (!password) {
+      setMessage({ kind: "error", text: t("login.passwordRequired") });
+      return;
+    }
+    setLoggingIn(true);
+    setMessage(null);
+    try {
+      const r = await authLogin(email, password);
+      setSession(r.user, r.member ?? null);
+      setMessage({ kind: "success", text: t("login.success") });
+      const target = computeSafeRedirect(next, r.user.is_admin);
+      setTimeout(() => router.replace(target), 400);
+    } catch (e) {
+      setMessage({ kind: "error", text: e instanceof Error ? e.message : String(e) });
+    } finally {
+      setLoggingIn(false);
+    }
+  };
+
+  // ── OTP send ──
+  const handleSendCode = async () => {
+    if (!otpEmail.trim()) {
       setMessage({ kind: "error", text: t("login.emailRequired") });
       return;
     }
     setSending(true);
     setMessage(null);
     try {
-      const r = await authSendCode(email);
+      const r = await authSendCode(otpEmail);
       if (r.success) {
-        setStep("code");
+        setOtpStep("code");
         setDevMode(!!r.dev_mode);
         setMessage({
           kind: r.dev_mode ? "info" : "success",
@@ -67,6 +106,7 @@ function LoginInner() {
     }
   };
 
+  // ── OTP verify ──
   const handleVerify = async () => {
     if (!code.trim()) {
       setMessage({ kind: "error", text: t("login.codeRequired") });
@@ -75,7 +115,7 @@ function LoginInner() {
     setVerifying(true);
     setMessage(null);
     try {
-      const r = await authVerify(email, code);
+      const r = await authVerify(otpEmail, code);
       setSession(r.user, r.member ?? null);
       setMessage({ kind: "success", text: t("login.success") });
       const target = computeSafeRedirect(next, r.user.is_admin);
@@ -85,6 +125,11 @@ function LoginInner() {
     } finally {
       setVerifying(false);
     }
+  };
+
+  const switchMode = (m: LoginMode) => {
+    setMode(m);
+    setMessage(null);
   };
 
   return (
@@ -108,7 +153,34 @@ function LoginInner() {
           </div>
         )}
 
-        {step === "email" && (
+        {/* ── Tab switcher ── */}
+        <div className="mb-5 flex rounded-2xl bg-[var(--secondary)]/50 p-1">
+          <button
+            onClick={() => switchMode("password")}
+            className={`flex-1 flex items-center justify-center gap-1.5 rounded-xl py-2.5 text-sm font-medium transition-all ${
+              mode === "password"
+                ? "bg-[var(--background)] text-[var(--foreground)] shadow-sm"
+                : "text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
+            }`}
+          >
+            <Lock className="h-3.5 w-3.5" />
+            {t("login.passwordLogin")}
+          </button>
+          <button
+            onClick={() => switchMode("otp")}
+            className={`flex-1 flex items-center justify-center gap-1.5 rounded-xl py-2.5 text-sm font-medium transition-all ${
+              mode === "otp"
+                ? "bg-[var(--background)] text-[var(--foreground)] shadow-sm"
+                : "text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
+            }`}
+          >
+            <Mail className="h-3.5 w-3.5" />
+            {t("login.otpLogin")}
+          </button>
+        </div>
+
+        {/* ── Password login form ── */}
+        {mode === "password" && (
           <div className="space-y-3">
             <label className="block">
               <div className="mb-2 flex items-center gap-2 text-sm font-medium">
@@ -118,7 +190,63 @@ function LoginInner() {
               <input
                 type="email"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                onChange={(e) => { setEmail(e.target.value); clearMessage(); }}
+                placeholder="your@email.com"
+                onKeyDown={(e) => e.key === "Enter" && handlePasswordLogin()}
+                className="w-full rounded-2xl border border-[var(--border)]/70 bg-[var(--background)] px-4 py-3 text-sm outline-none transition-colors focus:border-[var(--primary)]"
+                autoFocus
+              />
+            </label>
+            <label className="block">
+              <div className="mb-2 flex items-center gap-2 text-sm font-medium">
+                <Lock className="h-4 w-4" />
+                {t("login.passwordLabel")}
+              </div>
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => { setPassword(e.target.value); clearMessage(); }}
+                placeholder="••••••"
+                onKeyDown={(e) => e.key === "Enter" && handlePasswordLogin()}
+                className="w-full rounded-2xl border border-[var(--border)]/70 bg-[var(--background)] px-4 py-3 text-sm outline-none transition-colors focus:border-[var(--primary)]"
+              />
+            </label>
+            <button
+              onClick={handlePasswordLogin}
+              disabled={loggingIn}
+              className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-[var(--primary)] px-4 py-3 text-sm font-semibold text-[var(--primary-foreground)] hover:opacity-90 disabled:opacity-50"
+            >
+              {loggingIn && <Loader2 className="h-4 w-4 animate-spin" />}
+              {t("login.loginBtn")}
+            </button>
+            <p className="text-center text-xs text-[var(--muted-foreground)]">
+              {t("login.noPasswordYet")}{" "}
+              <button
+                className="underline hover:text-[var(--foreground)]"
+                onClick={() => {
+                  setOtpEmail(email);
+                  setOtpStep("email");
+                  switchMode("otp");
+                }}
+              >
+                {t("login.switchToOtp")}
+              </button>
+            </p>
+          </div>
+        )}
+
+        {/* ── OTP login form ── */}
+        {mode === "otp" && otpStep === "email" && (
+          <div className="space-y-3">
+            <label className="block">
+              <div className="mb-2 flex items-center gap-2 text-sm font-medium">
+                <Mail className="h-4 w-4" />
+                {t("login.emailLabel")}
+              </div>
+              <input
+                type="email"
+                value={otpEmail}
+                onChange={(e) => { setOtpEmail(e.target.value); clearMessage(); }}
                 placeholder="your@email.com"
                 onKeyDown={(e) => e.key === "Enter" && handleSendCode()}
                 className="w-full rounded-2xl border border-[var(--border)]/70 bg-[var(--background)] px-4 py-3 text-sm outline-none transition-colors focus:border-[var(--primary)]"
@@ -133,17 +261,29 @@ function LoginInner() {
               {sending && <Loader2 className="h-4 w-4 animate-spin" />}
               {t("login.sendCode")}
             </button>
-          </div>
-        )}
-
-        {step === "code" && (
-          <div className="space-y-3">
-            <div className="rounded-xl bg-[var(--secondary)]/40 px-3 py-2 text-xs text-[var(--muted-foreground)]">
-              {t("login.codeSentTo")} <strong>{email}</strong>{" "}
+            <p className="text-center text-xs text-[var(--muted-foreground)]">
+              {t("login.alreadyHavePassword")}{" "}
               <button
                 className="underline hover:text-[var(--foreground)]"
                 onClick={() => {
-                  setStep("email");
+                  setEmail(otpEmail);
+                  switchMode("password");
+                }}
+              >
+                {t("login.switchToPassword")}
+              </button>
+            </p>
+          </div>
+        )}
+
+        {mode === "otp" && otpStep === "code" && (
+          <div className="space-y-3">
+            <div className="rounded-xl bg-[var(--secondary)]/40 px-3 py-2 text-xs text-[var(--muted-foreground)]">
+              {t("login.codeSentTo")} <strong>{otpEmail}</strong>{" "}
+              <button
+                className="underline hover:text-[var(--foreground)]"
+                onClick={() => {
+                  setOtpStep("email");
                   setCode("");
                   setMessage(null);
                 }}
@@ -187,6 +327,18 @@ function LoginInner() {
             >
               {sending ? t("login.resending") : t("login.resend")}
             </button>
+            <p className="text-center text-xs text-[var(--muted-foreground)]">
+              {t("login.alreadyHavePassword")}{" "}
+              <button
+                className="underline hover:text-[var(--foreground)]"
+                onClick={() => {
+                  setEmail(otpEmail);
+                  switchMode("password");
+                }}
+              >
+                {t("login.switchToPassword")}
+              </button>
+            </p>
           </div>
         )}
 

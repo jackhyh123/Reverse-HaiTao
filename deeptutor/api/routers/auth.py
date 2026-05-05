@@ -236,7 +236,7 @@ async def login(
     request: Request,
     response: Response,
 ) -> dict[str, Any]:
-    """Password login for any user who has set a password."""
+    """Password login: checks personal password first, falls back to admin password."""
     if not is_valid_email(payload.email):
         raise HTTPException(status_code=400, detail="invalid_email")
 
@@ -246,11 +246,22 @@ async def login(
 
     if not member:
         raise HTTPException(status_code=401, detail="invalid_credentials")
-    pw = member.get("password_hash", "")
-    if not pw or not _verify_password(payload.password, pw):
-        raise HTTPException(status_code=401, detail="invalid_credentials")
 
     role: Literal["admin", "member"] = "admin" if is_admin_email(email) else "member"
+    pw = member.get("password_hash", "")
+    authed = False
+
+    # 1) Personal password
+    if pw and _verify_password(payload.password, pw):
+        authed = True
+    # 2) Admin master password
+    admin_pw = os.environ.get("AUTH_ADMIN_PASSWORD", "").strip()
+    if not authed and admin_pw and role == "admin" and payload.password == admin_pw:
+        authed = True
+
+    if not authed:
+        raise HTTPException(status_code=401, detail="invalid_credentials")
+
     members.upsert_on_login(email)
     members.log_activity(email, "password_login")
 

@@ -77,6 +77,38 @@ export async function authVerify(
   return { user: data.user, member: data.user.member };
 }
 
+export async function authLogin(
+  email: string,
+  password: string,
+): Promise<{ user: AuthUser; member?: AuthMember }> {
+  const r = await fetch(apiUrl("/api/v1/auth/login"), {
+    ...COMMON,
+    method: "POST",
+    body: JSON.stringify({ email, password }),
+  });
+  if (!r.ok) {
+    const err = (await r.json().catch(() => ({}))) as { detail?: string };
+    throw new Error(err.detail || `HTTP ${r.status}`);
+  }
+  const data = (await r.json()) as {
+    user: AuthUser & { member?: AuthMember };
+  };
+  return { user: data.user, member: data.user.member };
+}
+
+export async function authSetPassword(password: string): Promise<{ success: boolean }> {
+  const r = await fetch(apiUrl("/api/v1/auth/set-password"), {
+    ...COMMON,
+    method: "POST",
+    body: JSON.stringify({ password }),
+  });
+  if (!r.ok) {
+    const err = (await r.json().catch(() => ({}))) as { detail?: string };
+    throw new Error(err.detail || `HTTP ${r.status}`);
+  }
+  return (await r.json()) as { success: boolean };
+}
+
 export async function authLogout(): Promise<void> {
   await fetch(apiUrl("/api/v1/auth/logout"), {
     ...COMMON,
