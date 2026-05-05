@@ -61,7 +61,8 @@ def get_current_user(
     if not sess:
         raise HTTPException(status_code=401, detail="not_authenticated")
     role = sess.get("role") or "member"
-    is_premium = bool(get_member_store().get_member(sess["email"]) or {}).get("is_premium", False)
+    member = get_member_store().get_member(sess["email"])
+    is_premium = bool(member.get("is_premium", False)) if member else False
     return UserInfo(
         email=sess["email"],
         role=role,
