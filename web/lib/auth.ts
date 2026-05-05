@@ -7,6 +7,7 @@ export interface AuthUser {
   role: "admin" | "member";
   is_admin: boolean;
   is_premium?: boolean;
+  has_password?: boolean;
   expires_at?: number | null;
 }
 

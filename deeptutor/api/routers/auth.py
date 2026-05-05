@@ -1,17 +1,22 @@
-"""Auth API: email OTP login + session cookie + admin guard.
+"""Auth API: email OTP + password login + session cookie + admin guard.
 
 Endpoints:
-    POST /api/v1/auth/send-code    {email} → send OTP
-    POST /api/v1/auth/verify       {email, code} → set cookie, returns user
-    POST /api/v1/auth/logout       → clear cookie
-    GET  /api/v1/auth/me           → current user (or 401)
+    POST /api/v1/auth/send-code     {email} → send OTP
+    POST /api/v1/auth/verify        {email, code} → set cookie, returns user
+    POST /api/v1/auth/login         {email, password} → set cookie (after first OTP)
+    POST /api/v1/auth/set-password  {password} → set login password (needs session)
+    POST /api/v1/auth/admin-login   {email, password} → admin-only password login
+    POST /api/v1/auth/logout        → clear cookie
+    GET  /api/v1/auth/me            → current user (or 401)
 
-Admin-protected dependencies are exposed as `require_admin` and `get_current_user`.
+Flow: first login → OTP verify → set-password → subsequent logins with password.
 """
 
 from __future__ import annotations
 
+import hashlib
 import os
+import secrets
 from typing import Any, Literal
 
 from fastapi import APIRouter, Cookie, Depends, HTTPException, Request, Response
@@ -30,6 +35,25 @@ router = APIRouter()
 COOKIE_NAME = "dt_session"
 
 
+# ─── password helpers ────────────────────────────────────────────────────
+
+def _hash_password(password: str, salt: str | None = None) -> tuple[str, str]:
+    """Hash a password with PBKDF2-SHA256. Returns (hash_hex, salt_hex)."""
+    if salt is None:
+        salt = secrets.token_hex(16)
+    dk = hashlib.pbkdf2_hmac("sha256", password.encode(), salt.encode(), 100_000)
+    return dk.hex(), salt
+
+
+def _verify_password(password: str, stored_hash: str) -> bool:
+    """Verify a password against stored 'salt:hash' string."""
+    if ":" not in stored_hash:
+        return False  # legacy or empty
+    salt, h = stored_hash.split(":", 1)
+    computed, _ = _hash_password(password, salt)
+    return secrets.compare_digest(computed, h)
+
+
 # ─── Models ──────────────────────────────────────────────────────────────
 
 
@@ -42,8 +66,12 @@ class VerifyPayload(BaseModel):
     code: str
 
 
-class AdminLoginPayload(BaseModel):
+class LoginPayload(BaseModel):
     email: str
+    password: str
+
+
+class SetPasswordPayload(BaseModel):
     password: str
 
 
@@ -52,7 +80,57 @@ class UserInfo(BaseModel):
     role: Literal["admin", "member"]
     is_admin: bool
     is_premium: bool = False
+    has_password: bool = False
     expires_at: float | None = None
+
+
+# ─── helpers ─────────────────────────────────────────────────────────────
+
+
+def _build_user_response(
+    email: str,
+    role: str,
+    member: dict,
+    session: dict,
+) -> dict[str, Any]:
+    return {
+        "user": {
+            "email": email,
+            "role": role,
+            "is_admin": role == "admin",
+            "is_premium": bool(member.get("is_premium", False)),
+            "has_password": bool(member.get("password_hash", "")),
+            "expires_at": session["expires_at"],
+            "member": member,
+        }
+    }
+
+
+def _create_session_and_set_cookie(
+    email: str,
+    role: str,
+    request: Request,
+    response: Response,
+) -> dict:
+    sessions = get_auth_session_store()
+    new_sess = sessions.create(
+        email=email,
+        role=role,
+        ip=request.client.host if request.client else "",
+        user_agent=request.headers.get("user-agent", "")[:240],
+    )
+    response.set_cookie(
+        key=COOKIE_NAME,
+        value=new_sess["token"],
+        max_age=int(new_sess["expires_at"] - new_sess.get("created_at", 0))
+        if new_sess.get("created_at")
+        else 2592000,
+        httponly=True,
+        samesite="lax",
+        secure=False,
+        path="/",
+    )
+    return new_sess
 
 
 # ─── Dependencies ────────────────────────────────────────────────────────
@@ -68,11 +146,13 @@ def get_current_user(
     role = sess.get("role") or "member"
     member = get_member_store().get_member(sess["email"])
     is_premium = bool(member.get("is_premium", False)) if member else False
+    has_password = bool(member.get("password_hash", "")) if member else False
     return UserInfo(
         email=sess["email"],
         role=role,
         is_admin=role == "admin",
         is_premium=is_premium,
+        has_password=has_password,
         expires_at=sess.get("expires_at"),
     )
 
@@ -87,10 +167,15 @@ def get_optional_user(
     if not sess:
         return None
     role = sess.get("role") or "member"
+    member = get_member_store().get_member(sess["email"])
+    is_premium = bool(member.get("is_premium", False)) if member else False
+    has_password = bool(member.get("password_hash", "")) if member else False
     return UserInfo(
         email=sess["email"],
         role=role,
         is_admin=role == "admin",
+        is_premium=is_premium,
+        has_password=has_password,
         expires_at=sess.get("expires_at"),
     )
 
@@ -127,7 +212,6 @@ async def verify(
     if not is_valid_email(payload.email):
         raise HTTPException(status_code=400, detail="invalid_email")
 
-    # Allow bypassing OTP verification via env var (for dev/debug)
     bypass_otp = os.environ.get("AUTH_BYPASS_OTP", "").strip().lower() in ("true", "1", "yes")
     if not bypass_otp:
         client = get_otp_client()
@@ -142,35 +226,53 @@ async def verify(
     member = members.upsert_on_login(email)
     members.log_activity(email, "login")
 
-    sessions = get_auth_session_store()
-    new_sess = sessions.create(
-        email=email,
-        role=role,
-        ip=request.client.host if request.client else "",
-        user_agent=request.headers.get("user-agent", "")[:240],
-    )
+    new_sess = _create_session_and_set_cookie(email, role, request, response)
+    return _build_user_response(email, role, member, new_sess)
 
-    response.set_cookie(
-        key=COOKIE_NAME,
-        value=new_sess["token"],
-        max_age=int(new_sess["expires_at"] - new_sess.get("created_at", 0))
-        if new_sess.get("created_at")
-        else 2592000,
-        httponly=True,
-        samesite="lax",
-        secure=False,  # dev-friendly; flip for prod HTTPS
-        path="/",
-    )
-    return {
-        "user": {
-            "email": email,
-            "role": role,
-            "is_admin": role == "admin",
-            "is_premium": bool(member.get("is_premium", False)),
-            "expires_at": new_sess["expires_at"],
-            "member": member,
-        }
-    }
+
+@router.post("/login")
+async def login(
+    payload: LoginPayload,
+    request: Request,
+    response: Response,
+) -> dict[str, Any]:
+    """Password login for any user who has set a password."""
+    if not is_valid_email(payload.email):
+        raise HTTPException(status_code=400, detail="invalid_email")
+
+    email = payload.email.lower().strip()
+    members = get_member_store()
+    member = members.get_member(email)
+
+    if not member:
+        raise HTTPException(status_code=401, detail="invalid_credentials")
+    pw = member.get("password_hash", "")
+    if not pw or not _verify_password(payload.password, pw):
+        raise HTTPException(status_code=401, detail="invalid_credentials")
+
+    role: Literal["admin", "member"] = "admin" if is_admin_email(email) else "member"
+    members.upsert_on_login(email)
+    members.log_activity(email, "password_login")
+
+    new_sess = _create_session_and_set_cookie(email, role, request, response)
+    member = members.get_member(email) or member
+    return _build_user_response(email, role, member, new_sess)
+
+
+@router.post("/set-password")
+async def set_password(
+    payload: SetPasswordPayload,
+    request: Request,
+    user: UserInfo = Depends(get_current_user),
+) -> dict[str, Any]:
+    """Set a login password after OTP verification (requires session)."""
+    if len(payload.password) < 6:
+        raise HTTPException(status_code=400, detail="password_too_short")
+
+    h, salt = _hash_password(payload.password)
+    stored = f"{salt}:{h}"
+    get_member_store().set_password(user.email, stored)
+    return {"success": True}
 
 
 @router.post("/logout")
@@ -190,11 +292,11 @@ async def logout(
 
 @router.post("/admin-login")
 async def admin_login(
-    payload: AdminLoginPayload,
+    payload: LoginPayload,
     request: Request,
     response: Response,
 ) -> dict[str, Any]:
-    """Password-based login for admin users (no OTP)."""
+    """Admin password login using AUTH_ADMIN_PASSWORD env var (no OTP, no DB password)."""
     email = payload.email.lower().strip()
     admin_password = os.environ.get("AUTH_ADMIN_PASSWORD", "").strip()
 
@@ -210,35 +312,8 @@ async def admin_login(
     member = members.upsert_on_login(email)
     members.log_activity(email, "admin_login")
 
-    sessions = get_auth_session_store()
-    new_sess = sessions.create(
-        email=email,
-        role=role,
-        ip=request.client.host if request.client else "",
-        user_agent=request.headers.get("user-agent", "")[:240],
-    )
-
-    response.set_cookie(
-        key=COOKIE_NAME,
-        value=new_sess["token"],
-        max_age=int(new_sess["expires_at"] - new_sess.get("created_at", 0))
-        if new_sess.get("created_at")
-        else 2592000,
-        httponly=True,
-        samesite="lax",
-        secure=False,
-        path="/",
-    )
-    return {
-        "user": {
-            "email": email,
-            "role": role,
-            "is_admin": True,
-            "is_premium": bool(member.get("is_premium", False)),
-            "expires_at": new_sess["expires_at"],
-            "member": member,
-        }
-    }
+    new_sess = _create_session_and_set_cookie(email, role, request, response)
+    return _build_user_response(email, role, member, new_sess)
 
 
 @router.get("/me")

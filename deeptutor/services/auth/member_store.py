@@ -261,14 +261,41 @@ class MemberStore:
         return dict(row) if row else None
 
     def _migrate_is_premium(self) -> None:
-        """Add is_premium column if missing (for existing databases)."""
+        """Add is_premium / password_hash columns if missing."""
         try:
             with self._conn() as c:
                 cols = [r["name"] for r in c.execute("PRAGMA table_info(members)").fetchall()]
                 if "is_premium" not in cols:
                     c.execute("ALTER TABLE members ADD COLUMN is_premium INTEGER NOT NULL DEFAULT 0")
+                if "password_hash" not in cols:
+                    c.execute("ALTER TABLE members ADD COLUMN password_hash TEXT DEFAULT ''")
         except Exception:
             pass
+
+    def set_password(self, email: str, password_hash: str) -> None:
+        with self._conn() as c:
+            c.execute(
+                "UPDATE members SET password_hash = ? WHERE email = ?",
+                (password_hash, email.strip().lower()),
+            )
+
+    def verify_password(self, email: str, password_hash: str) -> bool:
+        email = email.strip().lower()
+        with self._conn() as c:
+            row = c.execute(
+                "SELECT password_hash FROM members WHERE email = ?", (email,)
+            ).fetchone()
+        if not row or not row["password_hash"]:
+            return False
+        return row["password_hash"] == password_hash
+
+    def has_password(self, email: str) -> bool:
+        email = email.strip().lower()
+        with self._conn() as c:
+            row = c.execute(
+                "SELECT password_hash FROM members WHERE email = ?", (email,)
+            ).fetchone()
+        return bool(row and row["password_hash"])
 
     # ─── activity ─────────────────────────────────────────────────────────
 
