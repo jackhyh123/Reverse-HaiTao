@@ -7,6 +7,7 @@ import {
   BookOpen,
   ChevronDown,
   ChevronUp,
+  Crown,
   ExternalLink,
   Globe,
   Layers,
@@ -15,7 +16,10 @@ import {
   RefreshCw,
   ShieldCheck,
   ShoppingCart,
+  Sparkles,
+  Store,
   Truck,
+  Users,
   X,
 } from "lucide-react";
 import {
@@ -38,6 +42,8 @@ import {
   findTopicById,
   getFeishuUrl,
 } from "@/lib/ecosystem-data";
+
+type ExplorePerspective = Perspective | "industry";
 
 // ─── Icon resolver ──────────────────────────────────────────────────
 
@@ -126,7 +132,7 @@ function classifyToStage(node: GraphNode): ClassificationResult {
 // ─── Page ───────────────────────────────────────────────────────────
 
 export default function ExplorePage() {
-  const [perspective, setPerspective] = useState<Perspective>("buyer");
+  const [perspective, setPerspective] = useState<ExplorePerspective>("buyer");
   const [expandedId, setExpandedId] = useState<FlowStageId | null>(null);
   const [hoveredId, setHoveredId] = useState<FlowStageId | null>(null);
   const [graph, setGraph] = useState<KnowledgeGraph | null>(null);
@@ -193,8 +199,8 @@ export default function ExplorePage() {
 
   const expandedStage = FLOW_STAGES.find((s) => s.id === expandedId) ?? null;
   const expandedNodes = expandedId ? stageMappings.get(expandedId) ?? [] : [];
-  const activeStage =
-    FLOW_STAGES.find((s) => s.id === (expandedId ?? hoveredId)) ?? null;
+  const isIndustryPerspective = perspective === "industry";
+  const flowPerspective: Perspective = isIndustryPerspective ? "seller" : perspective;
 
   const handleRetry = useCallback(() => {
     setLoading(true);
@@ -256,10 +262,15 @@ export default function ExplorePage() {
               { id: "buyer" as Perspective, zh: "买家视角", en: "Buyer" },
               { id: "platform" as Perspective, zh: "平台视角", en: "Platform" },
               { id: "seller" as Perspective, zh: "卖家视角", en: "Seller" },
+              { id: "industry" as const, zh: "行业视角", en: "Industry" },
             ]).map((p) => (
               <button
                 key={p.id}
-                onClick={() => setPerspective(p.id)}
+                onClick={() => {
+                  setPerspective(p.id);
+                  setExpandedId(null);
+                  setHoveredId(null);
+                }}
                 className="rounded-full px-3.5 py-1.5 text-[12px] font-semibold transition-all duration-200 md:px-4"
                 style={{
                   background:
@@ -280,39 +291,41 @@ export default function ExplorePage() {
           </div>
 
           {/* Mobile Pill Strip — horizontally scrollable */}
-          <div
-            className="mt-3 flex items-center gap-1.5 overflow-x-auto pb-0.5 md:hidden"
-            style={{ scrollbarWidth: "none" }}
-          >
-            {FLOW_STAGES.map((stage) => {
-              const isActive = expandedId === stage.id;
-              return (
-                <button
-                  key={stage.id}
-                  onClick={() => mobileToggleExpand(stage.id)}
-                  className="inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1.5 text-[12px] font-semibold transition-all duration-200 active:scale-95"
-                  style={{
-                    borderColor: isActive ? stage.color : "var(--border)",
-                    background: isActive ? stage.bgColor : "var(--card)",
-                    color: isActive ? stage.color : "var(--muted-foreground)",
-                    boxShadow: isActive
-                      ? `0 1px 4px ${stage.color}30`
-                      : "none",
-                  }}
-                >
-                  <span style={{ color: isActive ? stage.color : "var(--muted-foreground)" }}>
-                    {stageIcon(stage.iconName, "h-3.5 w-3.5")}
-                  </span>
-                  <span className="text-[11px]">{stage.title.zh}</span>
-                  {isActive ? (
-                    <ChevronUp className="h-3 w-3" />
-                  ) : (
-                    <ChevronDown className="h-3 w-3" />
-                  )}
-                </button>
-              );
-            })}
-          </div>
+          {!isIndustryPerspective && (
+            <div
+              className="mt-3 flex items-center gap-1.5 overflow-x-auto pb-0.5 md:hidden"
+              style={{ scrollbarWidth: "none" }}
+            >
+              {FLOW_STAGES.map((stage) => {
+                const isActive = expandedId === stage.id;
+                return (
+                  <button
+                    key={stage.id}
+                    onClick={() => mobileToggleExpand(stage.id)}
+                    className="inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1.5 text-[12px] font-semibold transition-all duration-200 active:scale-95"
+                    style={{
+                      borderColor: isActive ? stage.color : "var(--border)",
+                      background: isActive ? stage.bgColor : "var(--card)",
+                      color: isActive ? stage.color : "var(--muted-foreground)",
+                      boxShadow: isActive
+                        ? `0 1px 4px ${stage.color}30`
+                        : "none",
+                    }}
+                  >
+                    <span style={{ color: isActive ? stage.color : "var(--muted-foreground)" }}>
+                      {stageIcon(stage.iconName, "h-3.5 w-3.5")}
+                    </span>
+                    <span className="text-[11px]">{stage.title.zh}</span>
+                    {isActive ? (
+                      <ChevronUp className="h-3 w-3" />
+                    ) : (
+                      <ChevronDown className="h-3 w-3" />
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         {/* Loading spinner */}
@@ -328,52 +341,58 @@ export default function ExplorePage() {
           </div>
         )}
 
-        {/* ── Flow Bar — horizontally scrollable (desktop only) ── */}
-        <div
-          className="hidden shrink-0 overflow-x-auto pb-2 md:block"
-          style={{
-            scrollbarWidth: "thin",
-            scrollbarColor: "var(--border) transparent",
-          }}
-        >
-          <div className="flex w-full items-stretch gap-1.5 sm:gap-2 lg:gap-2.5">
-            {FLOW_STAGES.map((stage, idx) => (
-              <FlowNode
-                key={stage.id}
-                stage={stage}
-                perspective={perspective}
-                isExpanded={expandedId === stage.id}
-                isHovered={hoveredId === stage.id}
-                onExpand={() => toggleExpand(stage.id)}
-                onHover={() => setHoveredId(stage.id)}
-                onLeave={() => setHoveredId(null)}
-                showArrow={idx < FLOW_STAGES.length - 1}
-              />
-            ))}
-          </div>
-        </div>
+        {!isIndustryPerspective && (
+          <>
+            {/* ── Flow Bar — horizontally scrollable (desktop only) ── */}
+            <div
+              className="hidden shrink-0 overflow-x-auto pb-2 md:block"
+              style={{
+                scrollbarWidth: "thin",
+                scrollbarColor: "var(--border) transparent",
+              }}
+            >
+              <div className="flex w-full items-stretch gap-1.5 sm:gap-2 lg:gap-2.5">
+                {FLOW_STAGES.map((stage, idx) => (
+                  <FlowNode
+                    key={stage.id}
+                    stage={stage}
+                    perspective={flowPerspective}
+                    isExpanded={expandedId === stage.id}
+                    isHovered={hoveredId === stage.id}
+                    onExpand={() => toggleExpand(stage.id)}
+                    onHover={() => setHoveredId(stage.id)}
+                    onLeave={() => setHoveredId(null)}
+                    showArrow={idx < FLOW_STAGES.length - 1}
+                  />
+                ))}
+              </div>
+            </div>
 
-        {/* ── Bottom area: Overview State vs Detail State ── */}
-        {expandedId === null ? (
+            {/* ── Bottom area: Overview State vs Detail State ── */}
+          </>
+        )}
+
+        {isIndustryPerspective ? (
+          <IndustryPyramidPanel />
+        ) : expandedId === null ? (
           <OverviewPanel
-            perspective={perspective}
             stageMappings={stageMappings}
             onStageClick={toggleExpand}
             hoveredId={hoveredId}
           />
         ) : (
-          <div ref={expandRef} className="grid gap-4 pt-4 lg:grid-cols-[minmax(0,1fr)_320px] lg:gap-7">
+          <div ref={expandRef} className="pt-4">
             {/* ── Expand Panel ── */}
             {expandedStage && (
               <div
-                className="min-w-0 rounded-[20px] border p-4 sm:p-5 md:p-6"
+                className="mx-auto max-w-5xl rounded-[20px] border p-4 sm:p-5 md:p-6"
                 style={{
                   borderColor: "var(--border)",
                   background: "var(--card)",
                 }}
               >
-                <div className="mb-3 flex items-center justify-between">
-                  <div className="flex items-center gap-2.5">
+                <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex min-w-0 items-center gap-2.5">
                     <div
                       className="flex h-8 w-8 items-center justify-center rounded-xl"
                       style={{
@@ -385,28 +404,41 @@ export default function ExplorePage() {
                     </div>
                     <div>
                       <h3
-                        className="text-[14px] font-bold sm:text-[15px]"
+                        className="text-[15px] font-black sm:text-[17px]"
                         style={{ color: "var(--foreground)" }}
                       >
                         {expandedStage.title.zh}
                       </h3>
-                      <p className="text-[11px] sm:text-[12px]" style={{ color: "var(--muted-foreground)" }}>
-                        {expandedStage.perspectives[perspective].description}
+                      <p className="max-w-2xl text-[12px] leading-relaxed" style={{ color: "var(--muted-foreground)" }}>
+                        {expandedStage.perspectives[flowPerspective].description}
                       </p>
                     </div>
                   </div>
-                  <button
-                    onClick={() => setExpandedId(null)}
-                    className="rounded-lg p-1.5 transition-colors hover:bg-[var(--secondary)]"
-                    style={{ color: "var(--muted-foreground)" }}
-                    title="收起详情"
-                  >
-                    <ChevronUp className="h-4 w-4" />
-                  </button>
+                  <div className="flex shrink-0 items-center gap-2">
+                    <Link
+                      href={`/learn?stage=${expandedStage.id}`}
+                      className="inline-flex items-center justify-center gap-1.5 rounded-xl px-3.5 py-2 text-[12px] font-bold transition-all hover:-translate-y-0.5"
+                      style={{
+                        background: expandedStage.bgColor,
+                        color: expandedStage.color,
+                      }}
+                    >
+                      <BookOpen className="h-3.5 w-3.5" />
+                      系统学习
+                    </Link>
+                    <button
+                      onClick={() => setExpandedId(null)}
+                      className="rounded-lg p-1.5 transition-colors hover:bg-[var(--secondary)]"
+                      style={{ color: "var(--muted-foreground)" }}
+                      title="收起详情"
+                    >
+                      <ChevronUp className="h-4 w-4" />
+                    </button>
+                  </div>
                 </div>
 
                 {/* Sub-module cards */}
-                <div className="grid gap-2.5 sm:grid-cols-2">
+                <div className="grid gap-2.5 md:grid-cols-2">
                   {expandedStage.subModules.map((sm) => (
                     <SubModuleCard
                       key={sm.id}
@@ -475,151 +507,6 @@ export default function ExplorePage() {
                 </div>
               </div>
             )}
-
-            {/* ── RIGHT INSIGHT PANEL ── */}
-            <aside
-              className="flex w-full shrink-0 flex-col rounded-2xl border p-5 md:pb-5"
-              style={{
-                borderColor: "var(--muted)",
-                background: "var(--muted)",
-                boxShadow: "none",
-              }}
-            >
-              {/* Stage title */}
-              <div className="mb-3">
-                <h4
-                  className="text-[13px] font-bold leading-tight"
-                  style={{ color: "var(--foreground)" }}
-                >
-                  {activeStage ? activeStage.title.zh : "生态总览"}
-                </h4>
-              </div>
-
-              {/* Stage essence */}
-              <div className="mb-3">
-                <p className="text-[11px] leading-relaxed" style={{ color: "var(--muted-foreground)" }}>
-                  {activeStage
-                    ? activeStage.essence.zh
-                    : "悬停或点击上方流程节点，查看该阶段的详细信息"}
-                </p>
-              </div>
-
-              {/* Ecosystem position */}
-              {activeStage && (
-                <div className="mb-3">
-                  <p
-                    className="mb-1 text-[10px] font-semibold uppercase tracking-wider"
-                    style={{ color: "var(--muted-foreground)" }}
-                  >
-                    生态位置
-                  </p>
-                  <div className="flex items-center gap-1.5 text-[11px]">
-                    {activeStage.ecosystemPosition.upstream && (
-                      <>
-                        <span style={{ color: "var(--muted-foreground)" }}>
-                          {activeStage.ecosystemPosition.upstream.zh}
-                        </span>
-                        <span style={{ color: "var(--border)" }}>→</span>
-                      </>
-                    )}
-                    <span
-                      className="rounded-full px-1.5 py-0.5 text-[10px] font-semibold"
-                      style={{
-                        background: activeStage.region.color + "18",
-                        color: activeStage.region.color,
-                      }}
-                    >
-                      {activeStage.region.zh}
-                    </span>
-                    {activeStage.ecosystemPosition.downstream && (
-                      <>
-                        <span style={{ color: "var(--border)" }}>→</span>
-                        <span style={{ color: "var(--muted-foreground)" }}>
-                          {activeStage.ecosystemPosition.downstream.zh}
-                        </span>
-                      </>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {/* Core concepts */}
-              {activeStage && (
-                <div className="mb-3">
-                  <p
-                    className="mb-1 text-[10px] font-semibold uppercase tracking-wider"
-                    style={{ color: "var(--muted-foreground)" }}
-                  >
-                    核心构成
-                  </p>
-                  <ul className="space-y-1">
-                    {activeStage.perspectives[perspective].bullets.map((b, i) => (
-                      <li
-                        key={i}
-                        className="flex items-start gap-1.5 text-[11px] leading-relaxed"
-                        style={{ color: "var(--muted-foreground)" }}
-                      >
-                        <span
-                          className="mt-1.5 h-1 w-1 shrink-0 rounded-full"
-                          style={{ background: activeStage.color }}
-                        />
-                        <span className="line-clamp-2">{b}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-
-              {/* Related knowledge chips */}
-              {activeStage && expandedNodes.length > 0 && (
-                <div className="mb-3">
-                  <p
-                    className="mb-1 text-[10px] font-semibold uppercase tracking-wider"
-                    style={{ color: "var(--muted-foreground)" }}
-                  >
-                    相关知识点
-                  </p>
-                  <div className="flex flex-wrap gap-1">
-                    {expandedNodes.slice(0, 8).map((node) => {
-                      const chipClass2 = "clay-chip inline-flex items-center px-1.5 py-0.5 text-[10px] transition-colors hover:border-[var(--primary)]";
-                      const chipStyle2 = { color: "var(--muted-foreground)" };
-                      const content2 = node.title?.zh || node.id;
-                      return (
-                        <span key={node.id} onClick={() => setModalTopicId(node.id)}
-                          className={`${chipClass2} cursor-pointer`} style={chipStyle2}>
-                          {content2}
-                        </span>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-
-              {/* CTA — sticky on mobile */}
-              <div
-                className="sticky bottom-0 -mx-5 mt-auto border-t px-5 pt-3 pb-5 md:static md:mx-0 md:px-0 md:pb-0"
-                style={{ borderColor: "var(--border)", background: "var(--muted)" }}
-              >
-                {activeStage ? (
-                  <Link
-                    href={`/learn?stage=${activeStage.id}`}
-                    className="clay-btn-primary inline-flex w-full items-center justify-center gap-1.5 rounded-xl px-4 py-2.5 text-[13px] font-bold transition-all duration-200 hover:-translate-y-0.5"
-                  >
-                    <BookOpen className="h-4 w-4" />
-                    系统学习：{activeStage.title.zh}
-                  </Link>
-                ) : (
-                  <span
-                    className="inline-flex w-full items-center justify-center gap-1.5 rounded-xl px-4 py-2 text-[12px] font-medium"
-                    style={{
-                      color: "var(--muted-foreground)",
-                    }}
-                  >
-                    点击上方节点查看详情
-                  </span>
-                )}
-              </div>
-            </aside>
           </div>
         )}
 
@@ -644,30 +531,204 @@ export default function ExplorePage() {
   );
 }
 
-// ─── OverviewPanel ───────────────────────────────────────────────────
+// ─── IndustryPyramidPanel ────────────────────────────────────────────
 
-const OVERVIEW_CARDS = [
+const INDUSTRY_LAYERS = [
   {
-    title: "看懂主链路",
-    desc: "从流量入口到内容回流，理解用户如何被触达、被说服、完成购买并产生反馈，形成增长闭环。",
+    id: "control",
+    title: "流量与规则控制层",
+    subtitle: "谁掌握入口，谁就更接近利润中心",
+    color: "#f59e0b",
+    icon: Crown,
+    width: "md:w-[46%]",
+    actors: ["大 KOL", "大社区", "头部代理平台", "大卖家"],
+    desc: "掌握曝光、入口、规则和用户心智。",
   },
   {
-    title: "理解三类角色",
-    desc: "买家、平台、卖家在同一条链路中关注不同问题，切换视角可以从不同立场理解生态运作。",
+    id: "conversion",
+    title: "转化与信任建设层",
+    subtitle: "把流量变成能下单的理由",
+    color: "#10b981",
+    icon: Users,
+    width: "md:w-[62%]",
+    actors: ["中小 KOL / KOC", "社群运营", "买手", "内容号"],
+    desc: "把用户的兴趣转成理解、信任和下单理由。",
   },
   {
-    title: "找到学习入口",
-    desc: "点击任意阶段可查看该阶段的核心构成，按需深入学习。",
+    id: "service",
+    title: "供给与履约服务层",
+    subtitle: "决定成本、交付体验和复购风险",
+    color: "#3b82f6",
+    icon: Store,
+    width: "md:w-[78%]",
+    actors: ["国内卖家", "淘宝 / 微店 / 1688", "仓库", "支付 / 物流 / 售后"],
+    desc: "决定商品成本、交付质量、时效和售后风险。",
+  },
+  {
+    id: "demand",
+    title: "海外用户需求层",
+    subtitle: "所有角色最终围绕需求分配利润",
+    color: "#8b5cf6",
+    icon: Sparkles,
+    width: "md:w-[94%]",
+    actors: ["低价替代", "潮流单品", "国货", "Rep / W2C 需求"],
+    desc: "所有角色最终都围绕用户想买什么来分配利润。",
   },
 ];
 
+const INDUSTRY_FLOWS = [
+  {
+    id: "traffic",
+    title: "流量流",
+    color: "#0ea5e9",
+    route: "KOL / 社区 → 用户 → 平台 / 卖家",
+  },
+  {
+    id: "money",
+    title: "资金流",
+    color: "#f97316",
+    route: "买家 → 代理平台 → 卖家 / 物流",
+  },
+  {
+    id: "trust",
+    title: "信任流",
+    color: "#10b981",
+    route: "QC / 晒单 → 社区 → 新买家",
+  },
+];
+
+function IndustryPyramidPanel() {
+  return (
+    <div className="mt-2 pb-6">
+      <section
+        className="rounded-[28px] border p-4 sm:p-6 lg:p-8"
+        style={{
+          borderColor: "var(--border)",
+          background:
+            "radial-gradient(circle at 50% 0%, rgba(245,158,11,0.10), transparent 36%), var(--card)",
+          boxShadow: "0 4px 16px rgba(120,100,80,0.10), 0 1px 4px rgba(120,100,80,0.06)",
+        }}
+      >
+        <div className="mb-6 text-center">
+          <p
+            className="text-[11px] font-semibold uppercase tracking-[0.28em]"
+            style={{ color: "var(--muted-foreground)" }}
+          >
+            Industry Pyramid
+          </p>
+          <h2 className="mt-1 text-xl font-black tracking-tight sm:text-2xl" style={{ color: "var(--foreground)" }}>
+            反淘行业金字塔
+          </h2>
+          <p className="mx-auto mt-2 max-w-2xl text-[13px] leading-relaxed" style={{ color: "var(--muted-foreground)" }}>
+            越靠上越掌握流量、信任和规则，越靠下越承担供给、履约和真实用户需求。
+          </p>
+        </div>
+
+        <div className="mx-auto mb-6 grid max-w-4xl gap-2.5 md:grid-cols-3">
+          {INDUSTRY_FLOWS.map((flow) => (
+            <div
+              key={flow.id}
+              className="rounded-2xl border p-3"
+              style={{
+                borderColor: `${flow.color}40`,
+                background: `linear-gradient(135deg, ${flow.color}12, transparent 62%), var(--background)`,
+              }}
+            >
+              <div className="mb-1.5 flex items-center gap-2">
+                <span className="h-2.5 w-2.5 rounded-full" style={{ background: flow.color }} />
+                <p className="text-[12px] font-black" style={{ color: flow.color }}>
+                  {flow.title}
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-1.5 text-[11px] font-semibold leading-relaxed" style={{ color: "var(--foreground)" }}>
+                {flow.route.split(" → ").map((step, index, arr) => (
+                  <React.Fragment key={step}>
+                    <span>{step}</span>
+                    {index < arr.length - 1 && (
+                      <ArrowRight className="h-3 w-3 shrink-0" style={{ color: flow.color }} />
+                    )}
+                  </React.Fragment>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="flex flex-col items-center gap-3">
+          {INDUSTRY_LAYERS.map((layer, index) => {
+            const Icon = layer.icon;
+            return (
+              <article
+                key={layer.id}
+                className={`group relative w-full ${layer.width} overflow-hidden rounded-[24px] border p-4 transition-all duration-200 hover:-translate-y-0.5 sm:p-5`}
+                style={{
+                  borderColor: `${layer.color}55`,
+                  background: `linear-gradient(135deg, ${layer.color}16, transparent 46%), var(--background)`,
+                  boxShadow: `0 12px 36px ${layer.color}12`,
+                }}
+              >
+                <div
+                  className="absolute -right-10 -top-10 h-28 w-28 rounded-full opacity-20 blur-2xl"
+                  style={{ background: layer.color }}
+                />
+                <div className="relative flex flex-col gap-3 sm:flex-row sm:items-start">
+                  <div
+                    className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl"
+                    style={{ background: `${layer.color}20`, color: layer.color }}
+                  >
+                    <Icon className="h-5 w-5" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span
+                        className="rounded-full px-2 py-0.5 text-[10px] font-black"
+                        style={{ background: `${layer.color}18`, color: layer.color }}
+                      >
+                        第 {index + 1} 层
+                      </span>
+                      <h3 className="text-[15px] font-black sm:text-[17px]" style={{ color: "var(--foreground)" }}>
+                        {layer.title}
+                      </h3>
+                    </div>
+                    <p className="mt-1 text-[12px] font-semibold" style={{ color: layer.color }}>
+                      {layer.subtitle}
+                    </p>
+                    <p className="mt-1.5 text-[12px] leading-relaxed sm:text-[13px]" style={{ color: "var(--muted-foreground)" }}>
+                      {layer.desc}
+                    </p>
+                    <div className="mt-3 flex flex-wrap gap-1.5">
+                      {layer.actors.map((actor) => (
+                        <span
+                          key={actor}
+                          className="rounded-full border px-2.5 py-1 text-[11px] font-semibold"
+                          style={{
+                            borderColor: `${layer.color}38`,
+                            background: "var(--card)",
+                            color: "var(--foreground)",
+                          }}
+                        >
+                          {actor}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </article>
+            );
+          })}
+        </div>
+      </section>
+    </div>
+  );
+}
+
+// ─── OverviewPanel ───────────────────────────────────────────────────
+
 function OverviewPanel({
-  perspective,
   stageMappings,
   onStageClick,
   hoveredId,
 }: {
-  perspective: Perspective;
   stageMappings: Map<FlowStageId, GraphNode[]>;
   onStageClick: (id: FlowStageId) => void;
   hoveredId: FlowStageId | null;
@@ -683,54 +744,20 @@ function OverviewPanel({
         boxShadow: "0 4px 16px rgba(120,100,80,0.10), 0 1px 4px rgba(120,100,80,0.06)",
       }}
     >
-      {/* Header */}
       <div className="mb-5 text-center">
         <h2
           className="mb-1 font-sans text-lg font-bold tracking-tight sm:text-xl"
           style={{ color: "var(--foreground)" }}
         >
-          生态总览
+          先选一个阶段看
         </h2>
         <p className="text-[13px] leading-relaxed sm:text-[14px]" style={{ color: "var(--muted-foreground)" }}>
-          先看懂全局，再进入具体阶段
+          从流量、信任、下单、履约、回流五个阶段理解反淘生态。
         </p>
-        <p
-          className="mx-auto mt-2 max-w-xl text-[12px] leading-relaxed"
-          style={{ color: "var(--muted-foreground)" }}
-        >
-          反淘生态不是单个购物动作，而是一个从内容触达到信任建立、再到交易履约和内容回流的完整链路。
-          理解这条链路上每个环节的角色和关系，是看懂行业的第一步。
-        </p>
-      </div>
-
-      {/* Three cognitive cards */}
-      <div className="mb-5 grid gap-3 sm:grid-cols-3">
-        {OVERVIEW_CARDS.map((card) => (
-          <div
-            key={card.title}
-            className="surface-card rounded-xl border p-4"
-            style={{
-              borderColor: "var(--border)",
-            }}
-          >
-            <h3
-              className="mb-1.5 text-[14px] font-bold"
-              style={{ color: "var(--foreground)" }}
-            >
-              {card.title}
-            </h3>
-            <p
-              className="text-[12px] leading-relaxed"
-              style={{ color: "var(--muted-foreground)" }}
-            >
-              {card.desc}
-            </p>
-          </div>
-        ))}
       </div>
 
       {/* Stage quick-jump chips */}
-      <div className="mb-5">
+      <div>
         <p
           className="mb-2 text-center text-[11px] font-medium"
           style={{ color: "var(--muted-foreground)" }}
@@ -770,13 +797,6 @@ function OverviewPanel({
           })}
         </div>
       </div>
-
-      {/* Footer hint */}
-      <div className="flex flex-col items-center gap-2">
-        <p className="text-[12px]" style={{ color: "var(--muted-foreground)" }}>
-          点击上方任一阶段，查看阶段详情
-        </p>
-      </div>
     </div>
   );
 }
@@ -809,7 +829,7 @@ function FlowNode({
       <div
         className="group relative flex w-full cursor-pointer flex-col rounded-[20px] transition-all duration-200"
         style={{
-          minHeight: "148px",
+          minHeight: "116px",
           background: "var(--card)",
           border: isExpanded
             ? `2.5px solid ${stage.color}`
@@ -850,8 +870,7 @@ function FlowNode({
             </div>
           </div>
 
-          {/* Region chip */}
-          <div className="mb-1">
+          <div className="mb-2">
             <span
               className="inline-block rounded-full px-1.5 py-0.5 text-[9px] font-semibold leading-none"
               style={{
@@ -863,22 +882,12 @@ function FlowNode({
             </span>
           </div>
 
-          {/* Bullets */}
-          <ul className="flex-1 space-y-0.5">
-            {pd.bullets.map((b, i) => (
-              <li
-                key={i}
-                className="flex items-start gap-1.5 text-[11px] leading-relaxed"
-                style={{ color: "var(--muted-foreground)", opacity: 0.72 }}
-              >
-                <span
-                  className="mt-1.5 h-1 w-1 shrink-0 rounded-full"
-                  style={{ background: stage.color }}
-                />
-                <span className="line-clamp-2">{b}</span>
-              </li>
-            ))}
-          </ul>
+          <p
+            className="line-clamp-2 text-[11px] leading-relaxed"
+            style={{ color: "var(--muted-foreground)", opacity: 0.8 }}
+          >
+            {pd.description}
+          </p>
         </div>
 
         {/* Triangle connector */}
@@ -947,16 +956,10 @@ function SubModuleCard({
         {subModule.title.zh}
       </h4>
       <p
-        className="mb-1 line-clamp-2 text-[11px] leading-relaxed"
+        className="mb-2.5 line-clamp-2 text-[11px] leading-relaxed"
         style={{ color: "var(--muted-foreground)" }}
       >
         {subModule.what.zh}
-      </p>
-      <p
-        className="mb-2.5 line-clamp-2 text-[11px] leading-relaxed"
-        style={{ color: "var(--muted-foreground)", opacity: 0.75 }}
-      >
-        {subModule.why.zh}
       </p>
       <span onClick={() => onTopicClick(subModule.id)} className="cursor-pointer">
         {ctaContent}

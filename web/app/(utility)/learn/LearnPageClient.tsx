@@ -13,6 +13,8 @@ import FloatingAITutor from "@/components/learn/FloatingAITutor";
 import InlineResourceReader from "@/components/learn/InlineResourceReader";
 import KnowledgeMapFlow from "@/components/learn/KnowledgeMapFlow";
 import NodeDetailPanel from "@/components/learn/NodeDetailPanel";
+import { NodeMiniRail, NodeMiniStrip } from "@/components/learn/NodeMiniRail";
+import { ResourceDesktop, uniqueResources } from "@/components/learn/ResourceDesktop";
 import { detectMilestones, MilestoneToast, type MilestoneDef } from "@/components/learn/MilestoneNotification";
 import DiagnosticOverlay, {
   getDiagnosticCompleted,
@@ -73,7 +75,14 @@ export default function LearnPageClient() {
     urlStage ?? "traffic_entry",
   );
   const [currentFocus, setCurrentFocus] = useState<FocusDirectionId>(
-    urlFocus ?? "all",
+    () => {
+      if (urlFocus) return urlFocus;
+      if (typeof window === "undefined") return "all";
+      const saved = getDiagnosticResult();
+      if (saved?.suggested_track === "seller") return "seller_growth";
+      if (saved?.suggested_track === "operator") return "platform_ops";
+      return "all";
+    },
   );
 
   const [graph, setGraph] = useState<KnowledgeGraph | null>(null);
@@ -88,7 +97,10 @@ export default function LearnPageClient() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [pendingMilestones, setPendingMilestones] = useState<MilestoneDef[]>([]);
-  const [streak, setStreak] = useState(0);
+  const [streak] = useState(() => {
+    if (typeof window === "undefined") return 0;
+    return updateStreak().currentStreak;
+  });
 
   // ── Reader state ──
   const [readerUrl, setReaderUrl] = useState<string | null>(null);
@@ -100,28 +112,37 @@ export default function LearnPageClient() {
   const readerUrlRef = useRef(readerUrl);
   const readerTitleRef = useRef(readerTitle);
   const readerNodeIdRef = useRef(readerNodeId);
-  readerUrlRef.current = readerUrl;
-  readerTitleRef.current = readerTitle;
-  readerNodeIdRef.current = readerNodeId;
+
+  useEffect(() => {
+    readerUrlRef.current = readerUrl;
+    readerTitleRef.current = readerTitle;
+    readerNodeIdRef.current = readerNodeId;
+  }, [readerUrl, readerTitle, readerNodeId]);
 
   // ── View mode ──
   const [viewMode, setViewMode] = useState<ViewMode>(() => {
-    if (typeof window === "undefined") return "panel";
-    return (localStorage.getItem("learn-view-mode") as ViewMode) || "panel";
+    if (typeof window === "undefined") return "graph";
+    return "graph";
   });
   useEffect(() => {
-    localStorage.setItem("learn-view-mode", viewMode);
+    localStorage.setItem("learn-view-mode", "graph");
   }, [viewMode]);
 
   // ── Diagnostic state ──
-  const [diagnosticCompleted, setDiagnosticCompleted] = useState(false);
+  const [diagnosticCompleted, setDiagnosticCompleted] = useState(() => {
+    if (typeof window === "undefined") return true;
+    return getDiagnosticCompleted();
+  });
   const [diagnosticResult, setDiagnosticResult] = useState<{
     level: string;
     level_label: string;
     suggested_track: string;
     summary: string;
     personalized_nodes: GraphNode[];
-  } | null>(null);
+  } | null>(() => {
+    if (typeof window === "undefined") return null;
+    return getDiagnosticResult();
+  });
   const [diagnosticMode, setDiagnosticMode] = useState<"none" | "banner" | "subtle" | "overlay">("none");
 
   // ── Mobile drawer ──
@@ -159,8 +180,10 @@ export default function LearnPageClient() {
   }, []);
 
   useEffect(() => {
-    setDrawerDragY(0);
-    setDrawerDragging(false);
+    queueMicrotask(() => {
+      setDrawerDragY(0);
+      setDrawerDragging(false);
+    });
   }, [selectedNode?.id]);
 
   // ── Data loading ──
@@ -206,44 +229,21 @@ export default function LearnPageClient() {
     }
   }, []);
 
-  // ── Diagnostic init ──
-  useEffect(() => {
-    const completed = getDiagnosticCompleted();
-    setDiagnosticCompleted(completed);
-    if (completed) {
-      const saved = getDiagnosticResult();
-      if (saved) {
-        setDiagnosticResult(saved);
-        // Auto-apply suggested focus direction from diagnostic result
-        const legacyTrack = saved.suggested_track;
-        if (legacyTrack === "seller") setCurrentFocus("seller_growth");
-        else if (legacyTrack === "operator") setCurrentFocus("platform_ops");
-      }
-    }
-  }, []);
-
-  // Determine diagnostic mode after checking completion
-  useEffect(() => {
-    if (diagnosticCompleted) {
-      setDiagnosticMode("none");
-      return;
-    }
-    // Has stage param or came from /explore → subtle hint
-    if (urlStage) {
-      setDiagnosticMode("subtle");
-    } else {
-      setDiagnosticMode("banner");
-    }
-  }, [diagnosticCompleted, urlStage]);
-
   // ── Load data ──
   useEffect(() => {
-    if (diagnosticCompleted) {
+    queueMicrotask(() => {
       void reload();
-    }
-    const data = updateStreak();
-    setStreak(data.currentStreak);
-  }, [reload, diagnosticCompleted]);
+    });
+  }, [reload]);
+
+  const effectiveDiagnosticMode =
+    diagnosticMode === "overlay"
+      ? "overlay"
+      : diagnosticCompleted
+        ? "none"
+        : urlStage
+          ? "subtle"
+          : "banner";
 
   // ── Diagnostic handlers ──
   const handleDiagnosticComplete = useCallback(
@@ -303,6 +303,17 @@ export default function LearnPageClient() {
     return focusNodes.filter((n) => classifyNodeToStage(n) === currentStage);
   }, [focusNodes, currentStage]);
 
+  // Active track ID for the graph views (map focus → legacy track)
+  const activeTrackId = useMemo(() => {
+    const focusDef = FOCUS_DIRECTIONS.find((f) => f.id === currentFocus);
+    return focusDef?.legacyTrackId || "seller";
+  }, [currentFocus]);
+
+  const currentTrackNodes = useMemo(() => {
+    if (!graph) return [] as GraphNode[];
+    return graph.nodes.filter((n) => n.track_ids.includes(activeTrackId));
+  }, [graph, activeTrackId]);
+
   // Stage statuses for the path display
   const stageStatuses = useMemo(
     () => computeStageStatuses(focusNodes, masteredIds),
@@ -315,11 +326,30 @@ export default function LearnPageClient() {
     [currentStageNodes, currentStage, currentFocus, masteredIds],
   );
 
-  // Active track ID for the graph views (map focus → legacy track)
-  const activeTrackId = useMemo(() => {
-    const focusDef = FOCUS_DIRECTIONS.find((f) => f.id === currentFocus);
-    return focusDef?.legacyTrackId || "seller";
-  }, [currentFocus]);
+  const fallbackFocusNode = useMemo(() => {
+    return (
+      recommendation.node ??
+      currentStageNodes[0] ??
+      currentTrackNodes.find((node) => !masteredIds.has(node.id)) ??
+      currentTrackNodes[0] ??
+      null
+    );
+  }, [currentStageNodes, currentTrackNodes, masteredIds, recommendation.node]);
+
+  const activeResourceNode = selectedNode ?? previewNode ?? fallbackFocusNode;
+
+  const leftResources = useMemo(() => {
+    if (!graph) return [];
+    const foundationResources = graph.nodes
+      .filter((node) => node.tags?.includes("foundation") || node.id === "antitao-concept")
+      .flatMap((node) => node.resources || []);
+    return uniqueResources(foundationResources).slice(0, 3);
+  }, [graph]);
+
+  const rightResources = useMemo(() => {
+    if (!activeResourceNode) return [];
+    return uniqueResources(activeResourceNode.resources || []).slice(0, 4);
+  }, [activeResourceNode]);
 
   // Counts
   const masteredCount = useMemo(
@@ -353,12 +383,21 @@ export default function LearnPageClient() {
     setFocusRequest((prev) => ({ nodeId, nonce: prev.nonce + 1 }));
   }, []);
 
+  const previewAndFocusNode = useCallback((node: GraphNode) => {
+    setPreviewNode(node);
+    requestNodeFocus(node.id);
+  }, [requestNodeFocus]);
+
+  const selectAndFocusNode = useCallback((node: GraphNode) => {
+    setPreviewNode(node);
+    setSelectedNode(node);
+    requestNodeFocus(node.id);
+  }, [requestNodeFocus]);
+
   const handleSelectNodeById = (nodeId: string) => {
     const next = graph?.nodes.find((n) => n.id === nodeId);
     if (!next) return;
-    setPreviewNode(next);
-    setSelectedNode(next);
-    requestNodeFocus(next.id);
+    selectAndFocusNode(next);
   };
 
   const handleOpenResource = useCallback((url: string, title: string) => {
@@ -408,12 +447,14 @@ export default function LearnPageClient() {
     setCurrentStage(stage);
     setSelectedNode(null);
     setPreviewNode(null);
+    setFocusRequest((prev) => ({ nodeId: null, nonce: prev.nonce + 1 }));
   }, []);
 
   const handleFocusChange = useCallback((focus: FocusDirectionId) => {
     setCurrentFocus(focus);
     setSelectedNode(null);
     setPreviewNode(null);
+    setFocusRequest((prev) => ({ nodeId: null, nonce: prev.nonce + 1 }));
   }, []);
 
   const handleReset = async () => {
@@ -435,7 +476,7 @@ export default function LearnPageClient() {
   }
 
   // ── Diagnostic overlay (full screen, blocking) ──
-  if (diagnosticMode === "overlay") {
+  if (effectiveDiagnosticMode === "overlay") {
     return (
       <DiagnosticOverlay
         onComplete={handleDiagnosticComplete}
@@ -456,7 +497,7 @@ export default function LearnPageClient() {
         streak={streak}
         onRediagnose={handleRedoDiagnostic}
         onReset={handleReset}
-        diagnosticMode={diagnosticMode}
+        diagnosticMode={effectiveDiagnosticMode}
         diagnosticLevelLabel={diagnosticResult?.level_label}
         viewMode={viewMode}
         onViewModeChange={setViewMode}
@@ -479,7 +520,7 @@ export default function LearnPageClient() {
       />
 
       {/* Diagnostic banner / subtle hint */}
-      {diagnosticMode === "banner" && (
+      {effectiveDiagnosticMode === "banner" && (
         <div className="shrink-0 border-b border-amber-200/60 bg-amber-50/70 px-5 py-2.5 dark:border-amber-500/20 dark:bg-amber-950/30">
           <div className="flex items-center justify-between gap-3">
             <p className="text-xs text-amber-800 dark:text-amber-200">
@@ -503,7 +544,7 @@ export default function LearnPageClient() {
         </div>
       )}
 
-      {diagnosticMode === "subtle" && (
+      {effectiveDiagnosticMode === "subtle" && (
         <div className="shrink-0 border-b border-amber-100/40 bg-amber-50/30 px-5 py-1.5 dark:bg-amber-950/10">
           <p className="text-[11px] text-amber-700/80 dark:text-amber-300/70">
             个性化学习路线可提升学习效率——
@@ -678,23 +719,40 @@ export default function LearnPageClient() {
           /* Graph view */
           <div className="relative min-w-0 flex-1">
             {graph && (
-              <KnowledgeMapFlow
-                graph={graph}
-                trackId={activeTrackId}
-                masteredIds={masteredIds}
-                selectedNodeId={selectedNode?.id || null}
-                focusNodeId={focusRequest.nodeId}
-                focusVersion={focusRequest.nonce}
-                openOnSingleTap={isMobile}
-                compact={isMobile}
-                onPreviewNode={(node) => setPreviewNode(node)}
-                onSelectNode={(node) => {
-                  setPreviewNode(node);
-                  setSelectedNode(node);
-                  requestNodeFocus(node.id);
-                }}
-                locale={locale}
-              />
+              <>
+                <KnowledgeMapFlow
+                  graph={graph}
+                  trackId={activeTrackId}
+                  masteredIds={masteredIds}
+                  selectedNodeId={selectedNode?.id || null}
+                  focusNodeId={focusRequest.nodeId ?? fallbackFocusNode?.id ?? null}
+                  focusVersion={focusRequest.nonce}
+                  openOnSingleTap={isMobile}
+                  compact={isMobile}
+                  onPreviewNode={previewAndFocusNode}
+                  onSelectNode={selectAndFocusNode}
+                  locale={locale}
+                />
+                {!selectedNode && (
+                  <ResourceDesktop
+                    locale={locale}
+                    leftResources={leftResources}
+                    rightResources={rightResources}
+                    rightTitle={activeResourceNode?.title[locale]}
+                    isPremiumUser={!!user?.is_premium}
+                    onOpenResource={handleOpenResource}
+                  />
+                )}
+                {!isMobile && selectedNode && (
+                  <NodeMiniRail
+                    nodes={currentTrackNodes}
+                    selectedNodeId={selectedNode.id}
+                    masteredIds={masteredIds}
+                    locale={locale}
+                    onSelect={selectAndFocusNode}
+                  />
+                )}
+              </>
             )}
             {/* Mobile: selected node drawer */}
             {isMobile && selectedNode && (
@@ -714,6 +772,13 @@ export default function LearnPageClient() {
                 >
                   <div className="h-1 w-10 rounded-full bg-[var(--border)]" />
                 </div>
+                <NodeMiniStrip
+                  nodes={currentTrackNodes}
+                  selectedNodeId={selectedNode.id}
+                  masteredIds={masteredIds}
+                  locale={locale}
+                  onSelect={selectAndFocusNode}
+                />
                 <NodeDetailPanel
                   node={selectedNode}
                   locale={locale}
@@ -740,6 +805,7 @@ export default function LearnPageClient() {
               locale={locale}
               isMastered={masteredIds.has(selectedNode.id)}
               isLoggedIn={!!user}
+              isPremiumUser={!!user?.is_premium}
               initialNotes={notesByNodeId.get(selectedNode.id) || ""}
               onClose={() => setSelectedNode(null)}
               onMarkMastered={handleMarkMastered}

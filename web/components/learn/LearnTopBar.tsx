@@ -5,7 +5,6 @@ import { useState, useRef, useEffect } from "react";
 import type { FocusDirectionId, FlowStageId } from "@/lib/ecosystem-data";
 import { FOCUS_DIRECTIONS } from "@/lib/ecosystem-data";
 import AchievementBadges from "./AchievementBadges";
-import ViewToggle from "./ViewToggle";
 
 type ViewMode = "panel" | "ecosystem" | "graph";
 
@@ -18,7 +17,7 @@ interface LearnTopBarProps {
   streak: number;
   onRediagnose: () => void;
   onReset: () => void;
-  diagnosticMode: "none" | "banner" | "subtle";
+  diagnosticMode: "none" | "banner" | "subtle" | "overlay";
   diagnosticLevelLabel?: string;
   viewMode: ViewMode;
   onViewModeChange: (mode: ViewMode) => void;
@@ -44,8 +43,8 @@ export default function LearnTopBar({
   onReset,
   diagnosticMode: _diagnosticMode,
   diagnosticLevelLabel,
-  viewMode,
-  onViewModeChange,
+  viewMode: _viewMode,
+  onViewModeChange: _onViewModeChange,
   locale,
   isLoggedIn,
   isMobile,
@@ -162,7 +161,7 @@ export default function LearnTopBar({
         </div>
       </div>
 
-      {/* Row 2: Focus direction dropdown + view toggle */}
+      {/* Row 2: Focus direction dropdown. The public beta uses graph view as the single default path. */}
       <div className="mt-2.5 flex items-center gap-2 md:mt-2">
         {/* Focus direction dropdown */}
         <div ref={dropdownRef} className="relative">
@@ -209,9 +208,8 @@ export default function LearnTopBar({
           )}
         </div>
 
-        {/* View mode toggle — pushed to right */}
-        <div className="ml-auto shrink-0">
-          <ViewToggle value={viewMode} onChange={onViewModeChange} />
+        <div className="ml-auto hidden text-[11px] font-semibold text-[var(--muted-foreground)] md:block">
+          图谱视图
         </div>
       </div>
     </div>

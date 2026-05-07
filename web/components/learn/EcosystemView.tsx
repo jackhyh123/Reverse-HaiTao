@@ -49,7 +49,7 @@ export default function EcosystemView({
 
   // Card refs for connection line positioning
   const cardRefs = useRef<Map<string, HTMLDivElement>>(new Map());
-  const sourceRef = useRef<HTMLDivElement | null>(null);
+  const [cardElements, setCardElements] = useState<Map<string, HTMLDivElement>>(new Map());
 
   const setCardRef = useCallback((nodeId: string, el: HTMLDivElement | null) => {
     if (el) {
@@ -57,6 +57,7 @@ export default function EcosystemView({
     } else {
       cardRefs.current.delete(nodeId);
     }
+    setCardElements(new Map(cardRefs.current));
   }, []);
 
   // Compute connections on hover
@@ -75,6 +76,7 @@ export default function EcosystemView({
   const hoveredNode = hoveredNodeId
     ? trackNodes.find((n) => n.id === hoveredNodeId)
     : null;
+  const hoveredElement = hoveredNodeId ? cardElements.get(hoveredNodeId) ?? null : null;
 
   // Handle card hover
   const handleCardHover = useCallback((nodeId: string | null) => {
@@ -138,10 +140,8 @@ export default function EcosystemView({
       {/* SVG connection overlay */}
       <EcosystemConnections
         connections={connections.list}
-        sourceRef={
-          hoveredNodeId ? cardRefs.current.get(hoveredNodeId) ?? null : null
-        }
-        targetRefs={cardRefs.current}
+        sourceRef={hoveredElement}
+        targetRefs={cardElements}
         sourceColor={
           hoveredNode
             ? REGIONS[

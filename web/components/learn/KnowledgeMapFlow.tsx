@@ -302,6 +302,7 @@ function FlowInner({
   );
 
   const [previewNodeId, setPreviewNodeId] = useState<string | null>(null);
+  const effectivePreviewNodeId = previewNodeId ?? (!selectedNodeId ? focusNodeId : null);
 
   // Empty customization (read-only mode — no user nodes, annotations, or edits)
   const emptyCustomization = useMemo(
@@ -323,7 +324,7 @@ function FlowInner({
       emptyCustomization,
       masteredIds,
       selectedNodeId,
-      previewNodeId,
+      effectivePreviewNodeId,
       focusVersion,
       trackColor,
       locale,
@@ -355,7 +356,7 @@ function FlowInner({
     emptyCustomization,
     masteredIds,
     selectedNodeId,
-    previewNodeId,
+    effectivePreviewNodeId,
     focusVersion,
     trackColor,
     locale,
@@ -390,7 +391,7 @@ function FlowInner({
       const cy = (focus.position?.y ?? 0) + nodeH / 2;
       void fitView({
         nodes: [{ id: nodeId }],
-        padding: 0.48,
+        padding: 0.28,
         maxZoom: Math.max(zoom, 0.86),
         duration,
       });
@@ -401,23 +402,22 @@ function FlowInner({
         });
       }, 120);
     },
-    [fitView, merged, setCenter],
+    [fitView, merged.flowNodes, nodeH, nodeW, setCenter],
   );
 
   // Focus logic
   useEffect(() => {
-    if (initialFitDoneRef.current) return;
     const laidOut = merged.flowNodes;
     const requestedFocusId =
-      previewNodeId && laidOut.some((n) => n.id === previewNodeId)
-        ? previewNodeId
+      effectivePreviewNodeId && laidOut.some((n) => n.id === effectivePreviewNodeId)
+        ? effectivePreviewNodeId
         : focusNodeId && laidOut.some((n) => n.id === focusNodeId)
           ? focusNodeId
           : selectedNodeId;
 
     // No explicit focus → fit all nodes into view
     if (!requestedFocusId) {
-      if (laidOut.length === 0) return;
+      if (initialFitDoneRef.current || laidOut.length === 0) return;
       const timer = setTimeout(() => {
         fitView({ padding: 0.2, maxZoom: 0.9, duration: 400 });
         initialFitDoneRef.current = true;
@@ -436,10 +436,10 @@ function FlowInner({
     if (focus) {
       const focusId = String(focus.id);
       const isPreviewFocus =
-        previewNodeId === focusId && selectedNodeId !== focusId;
+        effectivePreviewNodeId === focusId && selectedNodeId !== focusId;
       const isSelectedFocus = selectedNodeId === focusId;
-      const zoom = isSelectedFocus ? 1.12 : isPreviewFocus ? 1.04 : 0.78;
-      const verticalOffset = isPreviewFocus ? 74 : 0;
+      const zoom = isSelectedFocus ? 1.18 : isPreviewFocus ? 1.16 : 1.12;
+      const verticalOffset = isSelectedFocus ? 0 : 52;
       setTimeout(() => focusNode(focusId, 300, zoom, verticalOffset), 60);
       setTimeout(
         () => focusNode(focusId, 420, zoom, verticalOffset),
@@ -450,7 +450,7 @@ function FlowInner({
   }, [
     merged.flowNodes,
     selectedNodeId,
-    previewNodeId,
+    effectivePreviewNodeId,
     focusNodeId,
     focusVersion,
     focusNode,

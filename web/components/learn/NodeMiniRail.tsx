@@ -19,7 +19,7 @@ export function NodeMiniRail({
   onSelect: (node: GraphNode) => void;
 }) {
   return (
-    <nav className="pointer-events-none absolute left-4 top-1/2 z-30 hidden max-h-[72vh] -translate-y-1/2 md:block">
+    <nav className="pointer-events-none absolute left-4 top-1/2 z-[55] hidden max-h-[72vh] -translate-y-1/2 md:block">
       <div className="pointer-events-auto flex flex-col gap-2 overflow-y-auto rounded-[22px] border border-[var(--border)]/55 bg-[var(--background)]/70 p-2 shadow-[0_18px_60px_rgba(15,23,42,0.12)] backdrop-blur-xl">
         {nodes.map((node, index) => {
           const active = node.id === selectedNodeId;
@@ -28,7 +28,12 @@ export function NodeMiniRail({
             <button
               key={node.id}
               type="button"
-              onClick={() => onSelect(node)}
+              onPointerDown={(event) => event.stopPropagation()}
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                onSelect(node);
+              }}
               title={node.title[locale]}
               className={`group flex h-10 w-10 items-center justify-center rounded-2xl border text-xs font-black transition-all ${
                 active
@@ -74,7 +79,12 @@ export function NodeMiniStrip({
             <button
               key={node.id}
               type="button"
-              onClick={() => onSelect(node)}
+              onPointerDown={(event) => event.stopPropagation()}
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                onSelect(node);
+              }}
               className={`flex min-w-[92px] shrink-0 items-center gap-1.5 rounded-full border px-3 py-2 text-xs font-black transition-colors ${
                 active
                   ? "border-[var(--primary)] bg-[var(--primary)] text-[var(--primary-foreground)]"

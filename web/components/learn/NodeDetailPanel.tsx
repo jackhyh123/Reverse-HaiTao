@@ -140,6 +140,9 @@ export default function NodeDetailPanel({
     setMasteryCardDismissed(false);
     setTab(savedMessages.length > 0 ? "tutor" : hasResources ? "resources" : "tutor");
     setCriteriaExpanded(false);
+    setReaderUrl(null);
+    setReaderTitle("");
+    setReaderStack([]);
   }, [node.id, hasResources]);
 
   useEffect(() => {

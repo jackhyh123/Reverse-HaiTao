@@ -34,6 +34,46 @@ export const RELEASE_NOTES: ReleaseNote[] = [
     highlights: [
       {
         title: {
+          zh: "生态图谱新增行业视角",
+          en: "New industry perspective in the ecosystem map",
+        },
+        description: {
+          zh: "在买家、平台、卖家视角之外，新增并简化「行业视角」金字塔：只保留四层结构与流量流、资金流、信任流，减少重复说明，让用户第一眼看懂行业结构。",
+          en: "The ecosystem map now adds a simplified Industry pyramid with four layers plus traffic, money, and trust flows, reducing repeated explanations for quicker understanding.",
+        },
+      },
+      {
+        title: {
+          zh: "生态图谱整体降噪",
+          en: "Ecosystem map is now quieter and easier to scan",
+        },
+        description: {
+          zh: "买家、平台、卖家视角也同步简化：阶段卡只保留一句视角说明，展开后取消重复右侧说明栏，把重点收回到阶段详情、核心模块和系统学习入口。",
+          en: "Buyer, platform, and seller views were also simplified: stage cards now keep one concise perspective line, and expanded details remove the repeated right-side explanation panel.",
+        },
+      },
+      {
+        title: {
+          zh: "学习首页重新收束为稳定的知识图谱主线",
+          en: "The learning homepage is now focused on the knowledge graph again",
+        },
+        description: {
+          zh: "默认进入 /learn 会直接看到图谱，不再先被诊断流程挡住；左右资源卡、节点缩略导航和右侧详情栏重新同步，点击节点后资料、详情和图谱聚焦会一起切换。",
+          en: "Opening /learn now goes straight to the graph without being blocked by diagnostics. Side resource cards, mini node navigation, and the detail panel are reconnected so resources, details, and graph focus stay in sync.",
+        },
+      },
+      {
+        title: {
+          zh: "进入图谱时会自动聚焦推荐节点",
+          en: "The graph now opens focused on the recommended node",
+        },
+        description: {
+          zh: "进入某个学习阶段时，系统会把当前最该学的节点放到画面中心偏上并放大显示，周边节点只作为路径上下文，减少一进来卡片太小、找不到入口的问题。",
+          en: "When entering a learning stage, the most relevant node is centered slightly above the viewport and enlarged, while nearby nodes remain as path context.",
+        },
+      },
+      {
+        title: {
           zh: "每个节点都有「实操任务」了",
           en: "Every node now has a practical task",
         },
@@ -64,12 +104,12 @@ export const RELEASE_NOTES: ReleaseNote[] = [
       },
       {
         title: {
-          zh: "资料支持内联阅读，不跳转飞书",
+          zh: "资料卡片统一打开站内阅读器",
           en: "Resources now open inline instead of jumping to Feishu",
         },
         description: {
-          zh: "点击资料链接会在当前页面弹出阅读面板，直接显示文档内容，不再跳转到飞书。想在新标签打开可以 Ctrl+点击。阅读面板顶部有「在飞书中打开」的快捷链接。",
-          en: "Clicking a resource link now opens an inline reading panel with the document content, instead of jumping to Feishu. Ctrl+click still opens in a new tab. An 'Open in Feishu' shortcut is available in the panel header.",
+          zh: "左右资源挂件和节点侧边栏资源现在统一打开站内阅读器，不再弹出原文跳转提示卡；资源挂件高度也统一，视觉更整齐。",
+          en: "Side resource widgets and node-panel resources now consistently open the in-app reader instead of a Feishu-original card, with aligned widget heights for a cleaner layout.",
         },
       },
       {
